@@ -1,0 +1,103 @@
+export type Role = 'reader' | 'author' | 'admin';
+export type AuthorStatus = 'none' | 'pending' | 'approved' | 'rejected';
+export type PostStatus = 'draft' | 'pending' | 'published' | 'rejected';
+export type Team =
+  | 'football' | 'basketball' | 'hockey' | 'baseball'
+  | 'olympic' | 'recruiting' | 'opinion';
+
+export interface Profile {
+  id: string;
+  email: string | null;
+  display_name: string;
+  avatar_url: string | null;
+  bio: string | null;
+  role: Role;
+  author_status: AuthorStatus;
+  author_pitch: string | null;
+  is_banned: boolean;
+  created_at: string;
+}
+
+export interface Post {
+  id: string;
+  author_id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  content_html: string;
+  content_json: unknown;
+  cover_image_url: string | null;
+  team: Team;
+  status: PostStatus;
+  review_note: string | null;
+  reviewed_by: string | null;
+  read_minutes: number;
+  view_count: number;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Comment {
+  id: string;
+  post_id: string;
+  author_id: string;
+  parent_id: string | null;
+  body: string;
+  is_hidden: boolean;
+  created_at: string;
+}
+
+export interface ForumCategory {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  accent: string;
+  sort_order: number;
+}
+
+export interface ForumThread {
+  id: string;
+  category_id: string;
+  author_id: string;
+  title: string;
+  body: string;
+  is_pinned: boolean;
+  is_locked: boolean;
+  is_hidden: boolean;
+  reply_count: number;
+  view_count: number;
+  last_activity_at: string;
+  created_at: string;
+}
+
+export interface ForumReply {
+  id: string;
+  thread_id: string;
+  author_id: string;
+  body: string;
+  is_hidden: boolean;
+  created_at: string;
+}
+
+export interface Report {
+  id: string;
+  reporter_id: string;
+  target_type: 'comment' | 'thread' | 'reply';
+  target_id: string;
+  reason: string;
+  status: 'open' | 'resolved' | 'dismissed';
+  created_at: string;
+}
+
+/** Post joined with its author profile. */
+export type PostWithAuthor = Post & { author: Pick<Profile, 'id' | 'display_name' | 'avatar_url'> | null };
+export type CommentWithAuthor = Comment & { author: Pick<Profile, 'id' | 'display_name' | 'avatar_url' | 'role'> | null };
+export type ThreadWithMeta = ForumThread & {
+  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url' | 'role'> | null;
+  category?: Pick<ForumCategory, 'id' | 'name' | 'slug' | 'accent'> | null;
+};
+export type ReplyWithAuthor = ForumReply & {
+  author: Pick<Profile, 'id' | 'display_name' | 'avatar_url' | 'role'> | null;
+};
