@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { Analytics } from '@vercel/analytics/next';
 import { Inter, Bitter } from 'next/font/google';
 import './globals.css';
 import Nav from '@/components/nav';
@@ -82,6 +83,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Nav profile={profile} />
         <main className="flex-1">{children}</main>
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
