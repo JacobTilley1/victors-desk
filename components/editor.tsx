@@ -89,7 +89,12 @@ export default function RichEditor({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-card focus-within:border-maize focus-within:ring-4 focus-within:ring-maize/20">
-      <div className="sticky top-[68px] z-20 flex flex-wrap items-center gap-0.5 border-b border-[var(--line)] bg-white/95 px-2.5 py-2 backdrop-blur">
+      {/*
+        The toolbar is fixed at the top of the editor and the text scrolls
+        inside its own pane below it. A sticky toolbar over a page-scrolled
+        document always ends up covering the line you're writing.
+      */}
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-[var(--line)] bg-white px-2.5 py-2">
         <Btn ed={editor} cmd={() => editor.chain().focus().toggleBold().run()} on="bold" label="Bold"><Bold size={16} /></Btn>
         <Btn ed={editor} cmd={() => editor.chain().focus().toggleItalic().run()} on="italic" label="Italic"><Italic size={16} /></Btn>
         <Btn ed={editor} cmd={() => editor.chain().focus().toggleStrike().run()} on="strike" label="Strikethrough"><Strikethrough size={16} /></Btn>
@@ -117,7 +122,7 @@ export default function RichEditor({
         </span>
       </div>
 
-      <div className="px-6 py-6 sm:px-9 sm:py-8">
+      <div className="max-h-[calc(100vh-15rem)] min-h-[460px] overflow-y-auto px-6 py-6 sm:px-9 sm:py-8">
         <EditorContent editor={editor} />
       </div>
     </div>
