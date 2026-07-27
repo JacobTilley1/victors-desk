@@ -13,7 +13,20 @@
 
 * { -webkit-tap-highlight-color: transparent; }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  /*
+   * Keep content clear of the sticky header (68px) plus the editor toolbar.
+   * Without this the browser scrolls the caret to just under the nav, where
+   * the toolbar covers it — the first line of a post ends up hidden.
+   */
+  scroll-padding-top: 136px;
+}
+
+@media (max-width: 640px) {
+  /* Toolbar wraps to two rows on narrow screens. */
+  html { scroll-padding-top: 178px; }
+}
 
 body {
   background: var(--bg);
