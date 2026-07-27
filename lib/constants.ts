@@ -7,6 +7,14 @@ export const SITE = {
     "Independent Michigan Wolverines coverage — football, basketball, hockey, recruiting, and the community that argues about all of it.",
 };
 
+/**
+ * Canonical origin, no trailing slash. Comes from NEXT_PUBLIC_SITE_URL,
+ * which must match the domain you actually want indexed.
+ */
+export const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+).replace(/\/+$/, '');
+
 export const TEAMS: { value: Team; label: string; short: string }[] = [
   { value: 'football',   label: 'Football',    short: 'FB'  },
   { value: 'basketball', label: 'Basketball',  short: 'BB'  },

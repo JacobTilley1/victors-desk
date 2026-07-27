@@ -312,6 +312,17 @@ git push -u origin main
 Replace `YOUR-USERNAME` with your actual GitHub username. A browser window may pop up
 to log you in — do it.
 
+> **If you already ran the `git remote add` line with `YOUR-USERNAME` still in it**, git
+> saved the placeholder and every later attempt fails with "remote origin already exists."
+> `git remote add` only works once. Point it at the right address instead:
+>
+> ```
+> git remote set-url origin https://github.com/YOUR-USERNAME/victors-desk.git
+> git remote -v
+> ```
+>
+> The second line prints where it's aimed. Confirm your username is in there, then push.
+
 If git asks who you are, run these once and then retry the commit:
 
 ```

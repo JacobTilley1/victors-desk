@@ -11,20 +11,39 @@ import { createClient } from '@/lib/supabase/server';
 import { getPostBySlug } from '@/lib/queries';
 import { getProfile, isAdmin } from '@/lib/auth';
 import { formatDate } from '@/lib/utils';
+import { SITE, SITE_URL, TEAM_LABEL } from '@/lib/constants';
 import { Clock, Eye, PenLine, ArrowLeft, AlertTriangle } from 'lucide-react';
 import type { CommentWithAuthor, PostWithAuthor } from '@/lib/database.types';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const post = await getPostBySlug(params.slug);
   if (!post) return { title: 'Post not found' };
+
+  // Drafts and submissions must never be indexed.
+  const indexable = post.status === 'published';
+
   return {
     title: post.title,
     description: post.excerpt ?? undefined,
+    alternates: { canonical: `/blog/${post.slug}` },
+    robots: indexable ? undefined : { index: false, follow: false },
+    authors: post.author ? [{ name: post.author.display_name }] : undefined,
     openGraph: {
       title: post.title,
       description: post.excerpt ?? undefined,
       images: post.cover_image_url ? [post.cover_image_url] : undefined,
+      url: `${SITE_URL}/blog/${post.slug}`,
+      siteName: SITE.name,
       type: 'article',
+      publishedTime: post.published_at ?? undefined,
+      modifiedTime: post.updated_at,
+      authors: post.author ? [post.author.display_name] : undefined,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: post.title,
+      description: post.excerpt ?? undefined,
+      images: post.cover_image_url ? [post.cover_image_url] : undefined,
     },
   };
 }
@@ -67,8 +86,46 @@ export default async function PostPage({ params }: { params: { slug: string } })
   const comments = (commentRows ?? []) as unknown as CommentWithAuthor[];
   const relatedPosts = (related ?? []) as unknown as PostWithAuthor[];
 
+  // Schema.org markup so Google can read this as a news article rather than
+  // guessing from the HTML. Only emitted for posts that are actually live.
+  const jsonLd = post.status === 'published' ? {
+    '@context': 'https://schema.org',
+    '@type': 'NewsArticle',
+    headline: post.title,
+    description: post.excerpt ?? undefined,
+    image: post.cover_image_url ? [post.cover_image_url] : undefined,
+    datePublished: post.published_at ?? post.created_at,
+    dateModified: post.updated_at,
+    articleSection: TEAM_LABEL[post.team] ?? post.team,
+    wordCount: post.content_html.replace(/<[^>]*>/g, ' ').trim().split(/\s+/).length,
+    author: post.author
+      ? {
+          '@type': 'Person',
+          name: post.author.display_name,
+          url: `${SITE_URL}/authors/${post.author.id}`,
+        }
+      : undefined,
+    publisher: {
+      '@type': 'Organization',
+      name: SITE.name,
+      url: SITE_URL,
+    },
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': `${SITE_URL}/blog/${post.slug}`,
+    },
+    commentCount: comments.length,
+    isAccessibleForFree: true,
+  } : null;
+
   return (
     <article>
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
       {/* status banner for drafts / pending */}
       {post.status !== 'published' && (
         <div className="border-b border-amber-200 bg-amber-50">
