@@ -65,7 +65,8 @@ export default function PostComposer({
         excerpt,
         coverImageUrl: cover,
         contentHtml: html,
-        contentJson: json,
+        // Safety net: anything crossing into a Server Action must be a plain object.
+        contentJson: json ? JSON.parse(JSON.stringify(json)) : null,
         intent,
       });
 

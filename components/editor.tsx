@@ -16,6 +16,16 @@ export interface EditorHandleValue {
   json: unknown;
 }
 
+/**
+ * ProseMirror builds node attribute objects with Object.create(null), so they
+ * have no prototype. React Server Actions reject those ("Only plain objects...
+ * can be passed to Server Actions"), which breaks publishing. A round-trip
+ * through JSON rebuilds everything as ordinary objects.
+ */
+function toPlainObject<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 export default function RichEditor({
   initialHtml = '',
   onChange,
@@ -42,7 +52,8 @@ export default function RichEditor({
     editorProps: {
       attributes: { class: 'prose-mich focus:outline-none' },
     },
-    onUpdate: ({ editor }) => onChange({ html: editor.getHTML(), json: editor.getJSON() }),
+    onUpdate: ({ editor }) =>
+      onChange({ html: editor.getHTML(), json: toPlainObject(editor.getJSON()) }),
   });
 
   useEffect(() => {
