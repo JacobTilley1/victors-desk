@@ -5,6 +5,7 @@ import Nav from '@/components/nav';
 import Footer from '@/components/footer';
 import { getProfile } from '@/lib/auth';
 import { SITE } from '@/lib/constants';
+import { Analytics } from '@vercel/analytics/next';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 const bitter = Bitter({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
@@ -25,6 +26,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Nav profile={profile} />
         <main className="flex-1">{children}</main>
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
