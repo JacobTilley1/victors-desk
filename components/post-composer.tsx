@@ -65,8 +65,9 @@ export default function PostComposer({
         excerpt,
         coverImageUrl: cover,
         contentHtml: html,
-        // Safety net: anything crossing into a Server Action must be a plain object.
-        contentJson: json ? JSON.parse(JSON.stringify(json)) : null,
+        // Sent as a string on purpose. Rich-text JSON can contain objects with
+        // no prototype, which Server Actions refuse to serialize.
+        contentJson: json ? JSON.stringify(json) : null,
         intent,
       });
 

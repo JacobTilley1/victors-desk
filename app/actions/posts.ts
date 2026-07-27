@@ -15,8 +15,19 @@ interface PostInput {
   excerpt?: string;
   coverImageUrl?: string;
   contentHtml: string;
-  contentJson?: unknown;
+  /** Tiptap document, already JSON-stringified by the client. */
+  contentJson?: string | null;
   intent: 'draft' | 'submit';
+}
+
+function parseContent(raw?: string | null) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as never;
+  } catch {
+    // A malformed document shouldn't block publishing — the HTML is what renders.
+    return null;
+  }
 }
 
 export async function savePost(input: PostInput): Promise<ActionResult> {
@@ -45,7 +56,7 @@ export async function savePost(input: PostInput): Promise<ActionResult> {
     excerpt: input.excerpt?.trim() || excerptFrom(input.contentHtml),
     cover_image_url: input.coverImageUrl?.trim() || null,
     content_html: input.contentHtml,
-    content_json: (input.contentJson ?? null) as never,
+    content_json: parseContent(input.contentJson),
     read_minutes: readingMinutes(input.contentHtml),
     status,
     review_note: null,
