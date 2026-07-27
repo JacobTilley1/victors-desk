@@ -10,6 +10,7 @@ export interface Profile {
   email: string | null;
   display_name: string;
   avatar_url: string | null;
+  google_avatar_url: string | null;
   bio: string | null;
   role: Role;
   author_status: AuthorStatus;

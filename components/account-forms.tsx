@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from 'react';
 import { updateProfile, applyToWrite } from '@/app/actions/account';
-import { CheckCircle2, AlertCircle, Loader2, Send } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import Avatar from '@/components/avatar';
+import {
+  CheckCircle2, AlertCircle, Loader2, Send, Upload, Trash2, RotateCcw,
+} from 'lucide-react';
 import type { Profile } from '@/lib/database.types';
 
 function Note({ msg }: { msg: { type: 'ok' | 'err'; text: string } | null }) {
@@ -21,19 +25,64 @@ function Note({ msg }: { msg: { type: 'ok' | 'err'; text: string } | null }) {
   );
 }
 
+const MAX_AVATAR_BYTES = 3 * 1024 * 1024; // 3 MB
+
 export function ProfileForm({ profile }: { profile: Profile }) {
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [bio, setBio] = useState(profile.bio ?? '');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url);
+  const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [pending, start] = useTransition();
+
+  async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // let the same file be re-picked later
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setMsg({ type: 'err', text: 'Pick an image file.' });
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setMsg({ type: 'err', text: 'That image is over 3 MB — try a smaller one.' });
+      return;
+    }
+
+    setMsg(null);
+    setUploading(true);
+
+    const supabase = createClient();
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    // Must live in a folder named after the user id — the storage policy requires it.
+    const path = `${profile.id}/${Date.now()}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { cacheControl: '3600', upsert: true });
+
+    if (error) {
+      setUploading(false);
+      setMsg({ type: 'err', text: `Upload failed: ${error.message}` });
+      return;
+    }
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+    setAvatarUrl(data.publicUrl);
+    setUploading(false);
+    setMsg({ type: 'ok', text: 'Picture ready — hit Save changes to apply it.' });
+  }
 
   function save() {
     setMsg(null);
     start(async () => {
-      const res = await updateProfile({ displayName, bio });
+      const res = await updateProfile({ displayName, bio, avatarUrl });
       setMsg({ type: res.ok ? 'ok' : 'err', text: res.message ?? (res.ok ? 'Saved.' : 'Failed.') });
     });
   }
+
+  const usingGoogle =
+    !!avatarUrl && !!profile.google_avatar_url && avatarUrl === profile.google_avatar_url;
 
   return (
     <div className="card p-6">
@@ -42,8 +91,53 @@ export function ProfileForm({ profile }: { profile: Profile }) {
         This is what other members see on your comments, threads and bylines.
       </p>
 
+      <label className="label mt-5">Profile picture</label>
+      <div className="flex flex-wrap items-center gap-5">
+        <div className="relative">
+          <Avatar name={displayName || 'Member'} url={avatarUrl} size={84} ring />
+          {uploading && (
+            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-navy/60">
+              <Loader2 size={22} className="animate-spin text-maize" />
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <label className="btn-ghost btn-sm cursor-pointer">
+            <Upload size={14} /> {avatarUrl ? 'Change picture' : 'Upload picture'}
+            <input type="file" accept="image/*" className="hidden" onChange={onPickAvatar} disabled={uploading} />
+          </label>
+
+          {avatarUrl && (
+            <button
+              type="button"
+              onClick={() => { setAvatarUrl(null); setMsg(null); }}
+              className="btn-ghost btn-sm"
+            >
+              <Trash2 size={14} /> Remove
+            </button>
+          )}
+
+          {profile.google_avatar_url && !usingGoogle && (
+            <button
+              type="button"
+              onClick={() => { setAvatarUrl(profile.google_avatar_url); setMsg(null); }}
+              className="btn-ghost btn-sm"
+            >
+              <RotateCcw size={14} /> Use Google photo
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="mt-2 text-[12px] text-slate-400">
+        Square images look best. Up to 3 MB. With no picture you get your initials on navy.
+      </p>
+
       <label className="label mt-5">Display name</label>
       <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="input" maxLength={60} />
+      <p className="mt-1 text-[12px] text-slate-400">
+        Yours to choose — it will not be reset by Google when you sign in again.
+      </p>
 
       <label className="label mt-4">Bio</label>
       <textarea
