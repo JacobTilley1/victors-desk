@@ -10,6 +10,13 @@ export const metadata = {
   description:
     'Every Michigan Wolverines story on The Victors\u2019 Desk \u2014 football, basketball, hockey, recruiting analysis and opinion, newest first.',
   alternates: { canonical: '/blog' },
+  openGraph: {
+    title: 'All stories',
+    description:
+      'Every Michigan Wolverines story on The Victors\u2019 Desk \u2014 football, basketball, hockey, recruiting analysis and opinion, newest first.',
+    url: '/blog',
+    type: 'website',
+  },
 };
 
 const PAGE_SIZE = 12;

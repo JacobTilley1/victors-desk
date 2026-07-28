@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getProfile, canPublish, isAdmin } from '@/lib/auth';
-import { uniqueSlug, readingMinutes, excerptFrom } from '@/lib/utils';
+import { slugify, uniqueSlug, readingMinutes, excerptFrom } from '@/lib/utils';
 import type { Team } from '@/lib/database.types';
 
 export type ActionResult = { ok: boolean; message?: string; slug?: string; id?: string };
@@ -18,6 +18,33 @@ interface PostInput {
   /** Tiptap document, already JSON-stringified by the client. */
   contentJson?: string | null;
   intent: 'draft' | 'submit';
+}
+
+/**
+ * Build the cleanest URL the headline allows.
+ *
+ * Slugs stay readable — /blog/warde-manuel-disgraced-michigan rather than a
+ * random suffix on every post. A number is appended only when that exact slug
+ * is already taken, which is rare.
+ */
+async function freeSlug(
+  supabase: ReturnType<typeof createClient>,
+  title: string
+): Promise<string> {
+  const base = slugify(title) || 'post';
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const candidate = attempt === 0 ? base : `${base}-${attempt + 1}`;
+    const { data } = await supabase
+      .from('posts')
+      .select('slug')
+      .eq('slug', candidate)
+      .maybeSingle();
+    if (!data) return candidate;
+  }
+
+  // Absurdly unlikely; fall back to the old random suffix.
+  return uniqueSlug(base);
 }
 
 function parseContent(raw?: string | null) {
@@ -84,7 +111,7 @@ export async function savePost(input: PostInput): Promise<ActionResult> {
     return { ok: true, id: input.id, slug: existing.slug, message: label(status) };
   }
 
-  const slug = uniqueSlug(title);
+  const slug = await freeSlug(supabase, title);
   const { data, error } = await supabase
     .from('posts')
     .insert({ ...payload, slug, author_id: profile.id })

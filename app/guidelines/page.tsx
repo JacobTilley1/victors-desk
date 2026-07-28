@@ -6,6 +6,13 @@ export const metadata = {
   description:
     'How comments and the forum are moderated on The Victors\u2019 Desk, and what gets your account suspended.',
   alternates: { canonical: '/guidelines' },
+  openGraph: {
+    title: 'Community rules',
+    description:
+      'How comments and the forum are moderated on The Victors\u2019 Desk, and what gets your account suspended.',
+    url: '/guidelines',
+    type: 'website',
+  },
 };
 
 const RULES = [

@@ -10,6 +10,13 @@ export const metadata = {
   description:
     'The writers behind The Victors\u2019 Desk \u2014 every byline approved by an editor.',
   alternates: { canonical: '/authors' },
+  openGraph: {
+    title: 'Writers',
+    description:
+      'The writers behind The Victors\u2019 Desk \u2014 every byline approved by an editor.',
+    url: '/authors',
+    type: 'website',
+  },
 };
 
 export default async function AuthorsPage() {

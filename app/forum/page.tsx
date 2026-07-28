@@ -11,6 +11,13 @@ export const metadata = {
   description:
     'Michigan game threads, recruiting talk and rivalry week arguments. A moderated forum for Wolverines fans.',
   alternates: { canonical: '/forum' },
+  openGraph: {
+    title: 'Community forum',
+    description:
+      'Michigan game threads, recruiting talk and rivalry week arguments. A moderated forum for Wolverines fans.',
+    url: '/forum',
+    type: 'website',
+  },
 };
 
 export default async function ForumHome() {
