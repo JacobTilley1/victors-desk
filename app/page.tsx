@@ -10,6 +10,10 @@ import { getProfile } from '@/lib/auth';
 import { TEAMS } from '@/lib/constants';
 import { formatDate, relative } from '@/lib/utils';
 
+export const metadata = {
+  alternates: { canonical: '/' },
+};
+
 export default async function HomePage() {
   const [{ posts }, threads, stats, profile] = await Promise.all([
     getPublishedPosts({ limit: 10 }),

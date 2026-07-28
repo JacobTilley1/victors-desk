@@ -1,7 +1,12 @@
 import Link from 'next/link';
 import { Shield, MessageSquare, Flag, PenLine } from 'lucide-react';
 
-export const metadata = { title: 'Community rules' };
+export const metadata = {
+  title: 'Community rules',
+  description:
+    'How comments and the forum are moderated on The Victors\u2019 Desk, and what gets your account suspended.',
+  alternates: { canonical: '/guidelines' },
+};
 
 const RULES = [
   {

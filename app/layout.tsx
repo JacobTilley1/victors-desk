@@ -15,7 +15,9 @@ export const metadata: Metadata = {
   title: { default: `${SITE.name} — ${SITE.tagline}`, template: `%s · ${SITE.name}` },
   description: SITE.description,
   applicationName: SITE.name,
-  alternates: { canonical: '/' },
+  // NOTE: no canonical here on purpose. A canonical in the root layout is
+  // inherited by every page that doesn't set its own, which tells Google the
+  // whole site is a duplicate of the home page. Each page declares its own.
   openGraph: {
     title: SITE.name,
     description: SITE.description,

@@ -5,7 +5,12 @@ import EmptyState from '@/components/empty-state';
 import { Users, PenLine } from 'lucide-react';
 import type { Profile } from '@/lib/database.types';
 
-export const metadata = { title: 'Writers' };
+export const metadata = {
+  title: 'Writers',
+  description:
+    'The writers behind The Victors\u2019 Desk \u2014 every byline approved by an editor.',
+  alternates: { canonical: '/authors' },
+};
 
 export default async function AuthorsPage() {
   const supabase = createClient();

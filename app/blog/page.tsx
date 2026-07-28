@@ -5,7 +5,12 @@ import { getPublishedPosts, getCommentCounts } from '@/lib/queries';
 import { TEAMS } from '@/lib/constants';
 import { Newspaper, Search } from 'lucide-react';
 
-export const metadata = { title: 'All stories' };
+export const metadata = {
+  title: 'All stories',
+  description:
+    'Every Michigan Wolverines story on The Victors\u2019 Desk \u2014 football, basketball, hockey, recruiting analysis and opinion, newest first.',
+  alternates: { canonical: '/blog' },
+};
 
 const PAGE_SIZE = 12;
 

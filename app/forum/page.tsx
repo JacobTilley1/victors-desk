@@ -6,7 +6,12 @@ import { relative } from '@/lib/utils';
 import { MessageSquare, Pin, Lock, Users, Flame, Plus } from 'lucide-react';
 import type { ForumCategory, ThreadWithMeta } from '@/lib/database.types';
 
-export const metadata = { title: 'Community forum' };
+export const metadata = {
+  title: 'Community forum',
+  description:
+    'Michigan game threads, recruiting talk and rivalry week arguments. A moderated forum for Wolverines fans.',
+  alternates: { canonical: '/forum' },
+};
 
 export default async function ForumHome() {
   const supabase = createClient();
