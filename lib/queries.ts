@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createPublicClient } from '@/lib/supabase/public';
 import type { PostWithAuthor, ThreadWithMeta } from '@/lib/database.types';
 
 const POST_SELECT = `
@@ -12,7 +13,7 @@ export async function getPublishedPosts(opts: {
   team?: string | null;
   search?: string | null;
 } = {}) {
-  const supabase = createClient();
+  const supabase = createPublicClient();
   let q = supabase
     .from('posts')
     .select(POST_SELECT, { count: 'exact' })
@@ -38,7 +39,7 @@ export async function getPostBySlug(slug: string) {
 }
 
 export async function getRecentThreads(limit = 6) {
-  const supabase = createClient();
+  const supabase = createPublicClient(30);
   const { data } = await supabase
     .from('forum_threads')
     .select(`
@@ -55,7 +56,7 @@ export async function getRecentThreads(limit = 6) {
 
 export async function getCommentCounts(postIds: string[]) {
   if (!postIds.length) return {} as Record<string, number>;
-  const supabase = createClient();
+  const supabase = createPublicClient(30);
   const { data } = await supabase
     .from('comments')
     .select('post_id')
@@ -70,7 +71,7 @@ export async function getCommentCounts(postIds: string[]) {
 }
 
 export async function getSiteStats() {
-  const supabase = createClient();
+  const supabase = createPublicClient(300);
   const [posts, members, threads] = await Promise.all([
     supabase.from('posts').select('id', { count: 'exact', head: true }).eq('status', 'published'),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),

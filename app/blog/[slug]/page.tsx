@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import Avatar from '@/components/avatar';
@@ -152,8 +153,14 @@ export default async function PostPage({ params }: { params: { slug: string } })
       <header className="relative overflow-hidden bg-navy text-white">
         {post.cover_image_url && (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={post.cover_image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-25" />
+            <Image
+              src={post.cover_image_url}
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover opacity-25"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/85 to-navy/60" />
           </>
         )}

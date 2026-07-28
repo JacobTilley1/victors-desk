@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import Avatar from '@/components/avatar';
 import TeamBadge from '@/components/team-badge';
 import { formatDate } from '@/lib/utils';
@@ -15,12 +16,13 @@ export default function PostCard({
       <Link href={`/blog/${post.slug}`} className="block">
         <div className="relative aspect-[16/9] overflow-hidden bg-navy">
           {post.cover_image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={post.cover_image_url}
-              alt=""
-              loading={priority ? 'eager' : 'lazy'}
-              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.06]"
+              alt={post.title}
+              fill
+              priority={priority}
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 380px"
+              className="object-cover transition-transform duration-700 group-hover:scale-[1.06]"
             />
           ) : (
             <div className="field-grain flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_30%_20%,#0a3b6b,#00274D)]">

@@ -8,6 +8,16 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      /*
+       * Supabase queries run through fetch, and Next.js caches fetch results by
+       * default — so a page could keep serving the answer it got the first time,
+       * long after the data changed. That's how a published post can be missing
+       * from /blog while its own URL works. Opt every query out of that cache.
+       */
+      global: {
+        fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+          fetch(input, { ...init, cache: 'no-store' }),
+      },
       cookies: {
         getAll() {
           return cookieStore.getAll();

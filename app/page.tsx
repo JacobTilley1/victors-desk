@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { ArrowRight, Flame, MessageSquare, PenLine, Users, TrendingUp } from 'lucide-react';
 import PostCard from '@/components/post-card';
 import SectionHeading from '@/components/section-heading';
@@ -80,11 +81,13 @@ export default async function HomePage() {
                 >
                   <div className="relative aspect-[16/10] overflow-hidden">
                     {lead.cover_image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <Image
                         src={lead.cover_image_url}
-                        alt=""
-                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        alt={lead.title}
+                        fill
+                        priority
+                        sizes="(max-width: 1024px) 100vw, 520px"
+                        className="object-cover transition-transform duration-700 group-hover:scale-105"
                       />
                     ) : (
                       <div className="field-grain flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,#0a3b6b,#00274D)]">
@@ -189,8 +192,13 @@ export default async function HomePage() {
                         </div>
                         <div className="hidden h-20 w-28 shrink-0 overflow-hidden rounded-xl bg-navy sm:block">
                           {p.cover_image_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={p.cover_image_url} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                  <Image
+                              src={p.cover_image_url}
+                              alt={p.title}
+                              fill
+                              sizes="112px"
+                              className="object-cover transition-transform duration-500 group-hover:scale-110"
+                            />
                           ) : (
                             <div className="field-grain flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,#0a3b6b,#00274D)]">
                               <span className="font-display text-2xl font-bold text-maize/30">M</span>
