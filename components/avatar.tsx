@@ -16,7 +16,10 @@ export default function Avatar({
         alt={name}
         width={size}
         height={size}
-        sizes={`${size}px`}
+        // No `sizes` here on purpose: for a fixed-size image it makes Next.js
+        // build a srcset from every device width and fall back to the 3840px
+        // version — an absurd download for a 28px avatar. Omitting it produces
+        // a simple 1x/2x srcset at the real size instead.
         className={`shrink-0 rounded-full object-cover ${cls}`}
         style={{ width: size, height: size }}
         referrerPolicy="no-referrer"
