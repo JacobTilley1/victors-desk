@@ -25,8 +25,16 @@ export default async function HomePage() {
 
   const counts = await getCommentCounts(posts.map((p) => p.id));
   const [lead, ...rest] = posts;
-  const secondary = rest.slice(0, 2);
-  const grid = rest.slice(2, 8);
+
+  /*
+   * Below the lead story, the first few posts get full cards and the remainder
+   * become compact rows. Only switch to rows once there are enough of them to
+   * look like a list — a single stranded row under a divider reads as a bug.
+   */
+  const USE_ROWS_AFTER = 3;
+  const showRows = rest.length > USE_ROWS_AFTER + 2;
+  const secondary = showRows ? rest.slice(0, USE_ROWS_AFTER) : rest.slice(0, 9);
+  const grid = showRows ? rest.slice(USE_ROWS_AFTER, 9) : [];
 
   return (
     <>
@@ -165,7 +173,17 @@ export default async function HomePage() {
               />
             ) : (
               <>
-                <div className="grid gap-6 sm:grid-cols-2">
+                {/* Column count follows the number of cards, so a leftover
+                    card never sits stranded at half width. */}
+                <div
+                  className={`grid gap-6 ${
+                    secondary.length === 1
+                      ? 'sm:grid-cols-1'
+                      : secondary.length === 2
+                      ? 'sm:grid-cols-2'
+                      : 'sm:grid-cols-2 lg:grid-cols-3'
+                  }`}
+                >
                   {secondary.map((p, i) => (
                     <div key={p.id} className="animate-fade-up" style={{ animationDelay: `${i * 70}ms` }}>
                       <PostCard post={p} commentCount={counts[p.id] ?? 0} />
@@ -190,7 +208,10 @@ export default async function HomePage() {
                             {p.author?.display_name ?? 'Staff'} · {formatDate(p.published_at)} · {p.read_minutes} min read
                           </p>
                         </div>
-                        <div className="hidden h-20 w-28 shrink-0 overflow-hidden rounded-xl bg-navy sm:block">
+                        {/* `relative` is required: a fill image without a
+                            positioned parent escapes and covers the nearest
+                            positioned ancestor instead. */}
+                        <div className="relative hidden h-20 w-28 shrink-0 overflow-hidden rounded-xl bg-navy sm:block">
                           {p.cover_image_url ? (
                                   <Image
                               src={p.cover_image_url}
