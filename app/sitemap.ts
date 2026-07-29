@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { createPublicClient } from '@/lib/supabase/public';
-import { SITE_URL, TEAMS } from '@/lib/constants';
+import { SITE_URL } from '@/lib/constants';
 
 // Rebuild the sitemap at most once an hour.
 export const revalidate = 3600;
@@ -39,12 +39,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/guidelines`, lastModified: now, changeFrequency: 'yearly',  priority: 0.3 },
   ];
 
-  const teamRoutes: MetadataRoute.Sitemap = TEAMS.map((t) => ({
-    url: `${SITE_URL}/blog?team=${t.value}`,
-    lastModified: now,
-    changeFrequency: 'daily' as const,
-    priority: 0.6,
-  }));
+  /*
+   * Sport filter views (/blog?team=…) are deliberately NOT listed.
+   * They declare /blog as their canonical, so submitting them tells Google to
+   * index pages that immediately disclaim themselves — which Search Console
+   * reports as "Duplicate without user-selected canonical". They stay
+   * crawlable via on-page links; they just don't belong in the sitemap.
+   */
 
   const postRoutes: MetadataRoute.Sitemap = (posts.data ?? []).map(
     (p: { slug: string; updated_at: string; published_at: string | null }) => ({
@@ -84,7 +85,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     ...staticRoutes,
-    ...teamRoutes,
     ...postRoutes,
     ...categoryRoutes,
     ...threadRoutes,
