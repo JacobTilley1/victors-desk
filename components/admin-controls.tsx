@@ -4,9 +4,9 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   reviewPost, reviewAuthor, resolveReport, moderateContent,
-  setUserBanned, unpublishPost,
+  setUserBanned, unpublishPost, setWriterRole,
 } from '@/app/actions/admin';
-import { Check, X, Loader2, EyeOff, Trash2, Ban, Undo2, ShieldCheck } from 'lucide-react';
+import { Check, X, Loader2, EyeOff, Trash2, Ban, Undo2, ShieldCheck, PenLine } from 'lucide-react';
 
 function useAction() {
   const router = useRouter();
@@ -131,6 +131,27 @@ export function ReportControls({
         {pending ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />} Dismiss
       </button>
     </div>
+  );
+}
+
+export function WriterToggle({
+  userId, isWriter,
+}: { userId: string; isWriter: boolean }) {
+  const { pending, run } = useAction();
+  return (
+    <button
+      onClick={() => run(() => setWriterRole({ userId, isWriter: !isWriter }))}
+      disabled={pending}
+      className={`btn btn-sm ${
+        isWriter
+          ? 'border border-[var(--line)] bg-white text-slate-500 hover:border-navy/30 hover:text-navy'
+          : 'border border-maize bg-maize-50 text-navy-700 hover:bg-maize-100'
+      }`}
+      title={isWriter ? 'Remove publishing access' : 'Grant publishing access'}
+    >
+      {pending ? <Loader2 size={13} className="animate-spin" /> : <PenLine size={13} />}
+      {isWriter ? 'Remove writer' : 'Make writer'}
+    </button>
   );
 }
 

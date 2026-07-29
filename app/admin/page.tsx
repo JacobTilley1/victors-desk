@@ -6,12 +6,15 @@ import Avatar from '@/components/avatar';
 import TeamBadge from '@/components/team-badge';
 import {
   PostReviewControls, AuthorReviewControls, ReportControls, BanToggle, UnpublishButton,
+  WriterToggle,
 } from '@/components/admin-controls';
 import { relative, formatDate } from '@/lib/utils';
-import { Shield, FileClock, UserPlus, Flag, Users, CheckCircle2 } from 'lucide-react';
+import { Shield, FileClock, UserPlus, Flag, Users, CheckCircle2, Search } from 'lucide-react';
 import type { Profile, Report, PostWithAuthor } from '@/lib/database.types';
 
 export const metadata = { title: 'Moderation' };
+
+const MEMBERS_PER_PAGE = 50;
 
 const TABS = [
   { key: 'queue',    label: 'Post queue',   icon: FileClock },
@@ -23,7 +26,7 @@ const TABS = [
 
 export default async function AdminPage({
   searchParams,
-}: { searchParams: { tab?: string } }) {
+}: { searchParams: { tab?: string; q?: string; page?: string } }) {
   const profile = await getProfile();
   if (!profile) redirect('/login?next=/admin');
   if (!isAdmin(profile)) {
@@ -52,7 +55,18 @@ export default async function AdminPage({
       .order('updated_at', { ascending: true }),
     supabase.from('profiles').select('*').eq('author_status', 'pending').order('created_at'),
     supabase.from('reports').select('*').eq('status', 'open').order('created_at', { ascending: false }),
-    supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(100),
+    (() => {
+      const q = (searchParams.q ?? '').trim();
+      const page = Math.max(1, Number(searchParams.page ?? '1') || 1);
+      const from = (page - 1) * MEMBERS_PER_PAGE;
+      let query = supabase
+        .from('profiles')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, from + MEMBERS_PER_PAGE - 1);
+      if (q) query = query.or(`display_name.ilike.%${q}%,email.ilike.%${q}%`);
+      return query;
+    })(),
     supabase
       .from('posts')
       .select('*, author:profiles!posts_author_id_fkey ( id, display_name, avatar_url )')
@@ -66,12 +80,31 @@ export default async function AdminPage({
   const openReports = (reports.data ?? []) as Report[];
   const people = (members.data ?? []) as Profile[];
   const published = (livePosts.data ?? []) as unknown as PostWithAuthor[];
+  const memberTotal = members.count ?? people.length;
+  const memberPage = Math.max(1, Number(searchParams.page ?? '1') || 1);
+
+  // Activity per member, so you can tell lurkers from contributors.
+  const [commentRows, threadRows, replyRows] = await Promise.all([
+    supabase.from('comments').select('author_id'),
+    supabase.from('forum_threads').select('author_id'),
+    supabase.from('forum_replies').select('author_id'),
+  ]);
+
+  const activity = new Map<string, { comments: number; posts: number }>();
+  const bump = (id: string, key: 'comments' | 'posts') => {
+    const row = activity.get(id) ?? { comments: 0, posts: 0 };
+    row[key] += 1;
+    activity.set(id, row);
+  };
+  (commentRows.data ?? []).forEach((r: { author_id: string }) => bump(r.author_id, 'comments'));
+  (threadRows.data ?? []).forEach((r: { author_id: string }) => bump(r.author_id, 'posts'));
+  (replyRows.data ?? []).forEach((r: { author_id: string }) => bump(r.author_id, 'posts'));
 
   const badge: Record<string, number> = {
     queue: queue.length,
     writers: apps.length,
     reports: openReports.length,
-    members: people.length,
+    members: memberTotal,
     live: published.length,
   };
 
@@ -181,23 +214,110 @@ export default async function AdminPage({
 
       {/* ---------- MEMBERS ---------- */}
       {tab === 'members' && (
-        <Section title="Members" empty={people.length === 0} emptyText="No members yet.">
-          {people.map((m) => (
-            <div key={m.id} className="flex flex-wrap items-center gap-4 p-4">
-              <Avatar name={m.display_name} url={m.avatar_url} size={38} />
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-2 text-[14.5px] font-bold text-navy">
-                  {m.display_name}
-                  {m.role === 'admin' && <span className="chip bg-navy px-2 py-0.5 text-[10px] text-maize">Admin</span>}
-                  {m.role === 'author' && <span className="chip bg-maize-100 px-2 py-0.5 text-[10px] text-navy-700">Writer</span>}
-                  {m.is_banned && <span className="chip bg-red-100 px-2 py-0.5 text-[10px] text-red-700">Suspended</span>}
-                </p>
-                <p className="text-[12px] text-slate-400">{m.email} · joined {formatDate(m.created_at)}</p>
-              </div>
-              {m.id !== profile.id && <BanToggle userId={m.id} banned={m.is_banned} />}
+        <>
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="font-display text-[20px] font-bold text-navy">Members</h2>
+              <p className="mt-0.5 text-[13px] text-slate-500">
+                {memberTotal} {memberTotal === 1 ? 'account' : 'accounts'}
+                {searchParams.q ? ` matching “${searchParams.q}”` : ''} · newest first
+              </p>
             </div>
-          ))}
-        </Section>
+
+            <form action="/admin" className="flex gap-2">
+              <input type="hidden" name="tab" value="members" />
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  name="q"
+                  defaultValue={searchParams.q ?? ''}
+                  placeholder="Search name or email…"
+                  className="input py-2 pl-9 text-[13.5px]"
+                />
+              </div>
+              <button className="btn-navy btn-sm">Search</button>
+              {searchParams.q && (
+                <Link href="/admin?tab=members" className="btn-ghost btn-sm">Clear</Link>
+              )}
+            </form>
+          </div>
+
+          <Section
+            title=""
+            empty={people.length === 0}
+            emptyText={searchParams.q ? 'Nobody matches that search.' : 'No members yet.'}
+          >
+            {people.map((m) => {
+              const act = activity.get(m.id) ?? { comments: 0, posts: 0 };
+              return (
+                <div key={m.id} className="flex flex-wrap items-center gap-4 p-4">
+                  <Avatar name={m.display_name} url={m.avatar_url} size={38} />
+
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-2 text-[14.5px] font-bold text-navy">
+                      {m.display_name}
+                      {m.role === 'admin' && <span className="chip bg-navy px-2 py-0.5 text-[10px] text-maize">Admin</span>}
+                      {m.role === 'author' && <span className="chip bg-maize-100 px-2 py-0.5 text-[10px] text-navy-700">Writer</span>}
+                      {m.author_status === 'pending' && (
+                        <span className="chip bg-amber-100 px-2 py-0.5 text-[10px] text-amber-800">Applied</span>
+                      )}
+                      {m.is_banned && <span className="chip bg-red-100 px-2 py-0.5 text-[10px] text-red-700">Suspended</span>}
+                    </p>
+                    <p className="text-[12px] text-slate-400">
+                      {m.email} · joined {formatDate(m.created_at)}
+                    </p>
+                    <p className="mt-1 text-[12px] font-medium text-slate-500">
+                      {act.comments} {act.comments === 1 ? 'comment' : 'comments'} · {act.posts} forum{' '}
+                      {act.posts === 1 ? 'post' : 'posts'}
+                      {act.comments + act.posts === 0 && (
+                        <span className="ml-1.5 text-slate-400">— no activity yet</span>
+                      )}
+                    </p>
+                  </div>
+
+                  {m.id !== profile.id && (
+                    <div className="flex flex-wrap gap-2">
+                      {m.role !== 'admin' && (
+                        <WriterToggle
+                          userId={m.id}
+                          isWriter={m.role === 'author' && m.author_status === 'approved'}
+                        />
+                      )}
+                      <BanToggle userId={m.id} banned={m.is_banned} />
+                    </div>
+                  )}
+                  {m.id === profile.id && (
+                    <span className="text-[12px] font-semibold text-slate-400">That&rsquo;s you</span>
+                  )}
+                </div>
+              );
+            })}
+          </Section>
+
+          {memberTotal > MEMBERS_PER_PAGE && (
+            <nav className="mt-6 flex items-center justify-center gap-2">
+              {memberPage > 1 && (
+                <Link
+                  href={`/admin?tab=members&page=${memberPage - 1}${searchParams.q ? `&q=${encodeURIComponent(searchParams.q)}` : ''}`}
+                  className="btn-ghost btn-sm"
+                >
+                  ← Newer
+                </Link>
+              )}
+              <span className="px-2 text-[13px] font-semibold text-slate-500">
+                Page {memberPage} of {Math.ceil(memberTotal / MEMBERS_PER_PAGE)}
+              </span>
+              {memberPage < Math.ceil(memberTotal / MEMBERS_PER_PAGE) && (
+                <Link
+                  href={`/admin?tab=members&page=${memberPage + 1}${searchParams.q ? `&q=${encodeURIComponent(searchParams.q)}` : ''}`}
+                  className="btn-ghost btn-sm"
+                >
+                  Older →
+                </Link>
+              )}
+            </nav>
+          )}
+        </>
       )}
 
       {/* ---------- PUBLISHED ---------- */}
@@ -231,7 +351,7 @@ function Section({
 }: { title: string; empty: boolean; emptyText: string; children: React.ReactNode }) {
   return (
     <>
-      <h2 className="mb-4 font-display text-[20px] font-bold text-navy">{title}</h2>
+      {title && <h2 className="mb-4 font-display text-[20px] font-bold text-navy">{title}</h2>}
       {empty ? (
         <div className="card px-6 py-14 text-center">
           <CheckCircle2 className="mx-auto mb-3 text-emerald-500" />

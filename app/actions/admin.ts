@@ -130,6 +130,37 @@ export async function resolveReport(input: { id: string; status: 'resolved' | 'd
   return { ok: true, message: 'Report closed.' };
 }
 
+/** Grant or revoke a byline without going through the application queue. */
+export async function setWriterRole(input: { userId: string; isWriter: boolean }) {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, message: 'Admins only.' };
+  if (admin.id === input.userId) return { ok: false, message: 'You cannot change your own role.' };
+
+  const supabase = createClient();
+
+  // Never demote another admin from here — that needs a deliberate SQL change.
+  const { data: target } = await supabase
+    .from('profiles').select('role').eq('id', input.userId).maybeSingle();
+  if (target?.role === 'admin') {
+    return { ok: false, message: 'That account is an admin. Change it in the database.' };
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update(
+      input.isWriter
+        ? { role: 'author', author_status: 'approved' }
+        : { role: 'reader', author_status: 'none' }
+    )
+    .eq('id', input.userId);
+
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath('/admin');
+  revalidatePath('/authors');
+  return { ok: true, message: input.isWriter ? 'Writer access granted.' : 'Writer access removed.' };
+}
+
 export async function setUserBanned(input: { userId: string; banned: boolean }) {
   const admin = await requireAdmin();
   if (!admin) return { ok: false, message: 'Admins only.' };
