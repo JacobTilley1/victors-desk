@@ -72,14 +72,22 @@ export async function getCommentCounts(postIds: string[]) {
 
 export async function getSiteStats() {
   const supabase = createPublicClient(300);
-  const [posts, members, threads] = await Promise.all([
+  const [posts, members, threads, views] = await Promise.all([
     supabase.from('posts').select('id', { count: 'exact', head: true }).eq('status', 'published'),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('forum_threads').select('id', { count: 'exact', head: true }).eq('is_hidden', false),
+    supabase.from('posts').select('view_count').eq('status', 'published'),
   ]);
+
+  const reads = (views.data ?? []).reduce(
+    (n: number, row: { view_count: number }) => n + (row.view_count ?? 0),
+    0
+  );
+
   return {
     posts: posts.count ?? 0,
     members: members.count ?? 0,
     threads: threads.count ?? 0,
+    reads,
   };
 }

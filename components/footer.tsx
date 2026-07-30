@@ -42,6 +42,7 @@ export default function Footer() {
               <li><Link href="/authors" className="text-slate-400 transition hover:text-maize">Our writers</Link></li>
               <li><Link href="/account" className="text-slate-400 transition hover:text-maize">Write for us</Link></li>
               <li><Link href="/guidelines" className="text-slate-400 transition hover:text-maize">Community rules</Link></li>
+              <li><Link href="/privacy" className="text-slate-400 transition hover:text-maize">Privacy policy</Link></li>
             </ul>
           </div>
         </div>

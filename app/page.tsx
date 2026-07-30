@@ -73,10 +73,21 @@ export default async function HomePage() {
                 </Link>
               </div>
 
+              {/*
+                Member and thread counts are deliberately not shown here. Small
+                numbers read as "nobody is here" and discourage sign-ups — the
+                opposite of what social proof is for. Total reads grows fastest
+                and is the most flattering true number we have. Threads only
+                appear once there are enough to be worth pointing at.
+              */}
               <dl className="mt-10 grid max-w-md grid-cols-3 gap-6 border-t border-white/10 pt-6">
                 <Stat value={stats.posts} label="Stories" />
-                <Stat value={stats.members} label="Members" />
-                <Stat value={stats.threads} label="Threads" />
+                <Stat value={stats.reads} label="Reads" />
+                {stats.threads >= 5 ? (
+                  <Stat value={stats.threads} label="Threads" />
+                ) : (
+                  <Stat value={new Date().getFullYear()} label="Season" />
+                )}
               </dl>
             </div>
 
