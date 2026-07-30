@@ -1,6 +1,10 @@
 import GaPageView from '@/components/ga-pageview';
 
-const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
+// A measurement ID is not a secret — it appears in the HTML of every page —
+// so it's hardcoded as the default. That removes the dependency on an
+// environment variable reaching the build, which is a common source of
+// "tag not found". Override with NEXT_PUBLIC_GA_ID if the property changes.
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID || 'G-QN8MCZ3TFW';
 
 /**
  * Google Analytics 4.
@@ -16,7 +20,9 @@ const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
  * preview deployments stay out of the reports.
  */
 export default function GoogleAnalytics() {
-  if (!GA_ID) return null;
+  // Only report from the live site, so local development and preview builds
+  // stay out of the numbers you'll eventually show an ad network.
+  if (!GA_ID || process.env.NODE_ENV !== 'production') return null;
 
   return (
     <>
