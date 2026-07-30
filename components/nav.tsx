@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { Menu, X, PenLine, Shield, LayoutGrid, LogOut, User } from 'lucide-react';
+import { Menu, X, PenLine, Shield, LayoutGrid, LogOut, User, BarChart3 } from 'lucide-react';
 import Logo from '@/components/logo';
 import Avatar from '@/components/avatar';
 import GoogleButton from '@/components/google-button';
@@ -115,6 +115,7 @@ export default function Nav({ profile }: { profile: Profile | null }) {
                     </span>
                   </div>
                   <MenuLink href="/dashboard" icon={<LayoutGrid size={15} />}>Dashboard</MenuLink>
+                  <MenuLink href="/dashboard/analytics" icon={<BarChart3 size={15} />}>Analytics</MenuLink>
                   <MenuLink href="/account" icon={<User size={15} />}>Account</MenuLink>
                   {canWrite && (
                     <MenuLink href="/write" icon={<PenLine size={15} />}>New post</MenuLink>

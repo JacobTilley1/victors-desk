@@ -6,7 +6,7 @@ import TeamBadge from '@/components/team-badge';
 import DeletePostButton from '@/components/delete-post-button';
 import EmptyState from '@/components/empty-state';
 import { formatDate } from '@/lib/utils';
-import { PenLine, Eye, Heart, MessageSquare, FileText, Clock, CheckCircle2, XCircle, CalendarClock } from 'lucide-react';
+import { PenLine, Eye, Heart, MessageSquare, FileText, Clock, CheckCircle2, XCircle, CalendarClock, BarChart3 } from 'lucide-react';
 import type { Post } from '@/lib/database.types';
 
 export const metadata = { title: 'Dashboard' };
@@ -59,9 +59,14 @@ export default async function Dashboard() {
             Hey, {profile.display_name.split(' ')[0]}
           </h1>
         </div>
-        {canPublish(profile) && (
-          <Link href="/write" className="btn-primary"><PenLine size={15} /> New post</Link>
-        )}
+        <div className="flex gap-2">
+          <Link href="/dashboard/analytics" className="btn-ghost">
+            <BarChart3 size={15} /> Analytics
+          </Link>
+          {canPublish(profile) && (
+            <Link href="/write" className="btn-primary"><PenLine size={15} /> New post</Link>
+          )}
+        </div>
       </div>
 
       <div className="mb-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
