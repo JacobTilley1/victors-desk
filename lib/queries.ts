@@ -18,6 +18,8 @@ export async function getPublishedPosts(opts: {
     .from('posts')
     .select(POST_SELECT, { count: 'exact' })
     .eq('status', 'published')
+    // Scheduled posts carry a future published_at and stay hidden until then.
+    .lte('published_at', new Date().toISOString())
     .order('published_at', { ascending: false });
 
   if (opts.team) q = q.eq('team', opts.team);

@@ -10,7 +10,7 @@ import { TEAMS } from '@/lib/constants';
 import { excerptFrom, readingMinutes } from '@/lib/utils';
 import type { Post, Team } from '@/lib/database.types';
 import {
-  Save, Send, Eye, EyeOff, ImageIcon, Loader2, CheckCircle2, AlertCircle, Upload,
+  Save, Send, Eye, EyeOff, ImageIcon, Loader2, CheckCircle2, AlertCircle, Upload, CalendarClock,
 } from 'lucide-react';
 
 export default function PostComposer({
@@ -27,6 +27,13 @@ export default function PostComposer({
   const [html, setHtml] = useState(post?.content_html ?? '');
   const [json, setJson] = useState<unknown>(post?.content_json ?? null);
   const [preview, setPreview] = useState(false);
+  // datetime-local wants "YYYY-MM-DDTHH:mm" in the browser's own timezone.
+  const [publishAt, setPublishAt] = useState(() => {
+    const at = post?.published_at ? new Date(post.published_at) : null;
+    if (!at || Number.isNaN(at.getTime()) || at.getTime() <= Date.now()) return '';
+    const local = new Date(at.getTime() - at.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  });
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
@@ -68,6 +75,7 @@ export default function PostComposer({
         // Sent as a string on purpose. Rich-text JSON can contain objects with
         // no prototype, which Server Actions refuse to serialize.
         contentJson: json ? JSON.stringify(json) : null,
+        publishAt: publishAt ? new Date(publishAt).toISOString() : null,
         intent,
       });
 
@@ -216,10 +224,41 @@ export default function PostComposer({
           </button>
         </div>
 
+        <div className="card p-5">
+          <h3 className="mb-3 flex items-center gap-1.5 font-display text-[15px] font-bold text-navy">
+            <CalendarClock size={15} /> Publish time
+          </h3>
+          <input
+            type="datetime-local"
+            value={publishAt}
+            onChange={(e) => setPublishAt(e.target.value)}
+            className="input text-[14px]"
+          />
+          {publishAt ? (
+            <div className="mt-2 flex items-start justify-between gap-2">
+              <p className="text-[12px] leading-relaxed text-navy-700">
+                {isAdmin
+                  ? 'Goes live at this time instead of immediately.'
+                  : 'Requested time. It goes live then, once an editor approves it.'}
+              </p>
+              <button
+                onClick={() => setPublishAt('')}
+                className="shrink-0 text-[12px] font-semibold text-slate-400 hover:text-navy"
+              >
+                Clear
+              </button>
+            </div>
+          ) : (
+            <p className="mt-2 text-[12px] text-slate-400">
+              Leave empty to publish as soon as it&rsquo;s approved.
+            </p>
+          )}
+        </div>
+
         <div className="card space-y-2.5 p-5">
           <button onClick={() => submit('submit')} disabled={pending} className="btn-primary w-full py-3">
             {pending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-            {isAdmin ? 'Publish now' : 'Submit for review'}
+            {publishAt ? (isAdmin ? 'Schedule' : 'Submit & schedule') : isAdmin ? 'Publish now' : 'Submit for review'}
           </button>
           <button onClick={() => submit('draft')} disabled={pending} className="btn-ghost w-full">
             <Save size={15} /> Save draft

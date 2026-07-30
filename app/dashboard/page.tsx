@@ -6,7 +6,7 @@ import TeamBadge from '@/components/team-badge';
 import DeletePostButton from '@/components/delete-post-button';
 import EmptyState from '@/components/empty-state';
 import { formatDate } from '@/lib/utils';
-import { PenLine, Eye, Heart, MessageSquare, FileText, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { PenLine, Eye, Heart, MessageSquare, FileText, Clock, CheckCircle2, XCircle, CalendarClock } from 'lucide-react';
 import type { Post } from '@/lib/database.types';
 
 export const metadata = { title: 'Dashboard' };
@@ -17,6 +17,10 @@ const STATUS_STYLE: Record<string, string> = {
   published: 'bg-emerald-100 text-emerald-800',
   rejected: 'bg-red-100 text-red-700',
 };
+
+function isScheduled(p: Post) {
+  return p.status === 'published' && !!p.published_at && new Date(p.published_at) > new Date();
+}
 
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Draft',
@@ -102,12 +106,18 @@ export default async function Dashboard() {
             <div key={p.id} className="flex flex-wrap items-center gap-4 p-5">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={`chip ${STATUS_STYLE[p.status]}`}>
-                    {p.status === 'published' ? <CheckCircle2 size={11} />
-                      : p.status === 'pending' ? <Clock size={11} />
-                      : p.status === 'rejected' ? <XCircle size={11} /> : <FileText size={11} />}
-                    {STATUS_LABEL[p.status]}
-                  </span>
+                  {isScheduled(p) ? (
+                    <span className="chip bg-sky-100 text-sky-800">
+                      <CalendarClock size={11} /> Scheduled
+                    </span>
+                  ) : (
+                    <span className={`chip ${STATUS_STYLE[p.status]}`}>
+                      {p.status === 'published' ? <CheckCircle2 size={11} />
+                        : p.status === 'pending' ? <Clock size={11} />
+                        : p.status === 'rejected' ? <XCircle size={11} /> : <FileText size={11} />}
+                      {STATUS_LABEL[p.status]}
+                    </span>
+                  )}
                   <TeamBadge team={p.team} />
                 </div>
 
@@ -116,8 +126,12 @@ export default async function Dashboard() {
                 </h3>
 
                 <p className="mt-1 text-[12.5px] text-slate-400">
-                  {p.status === 'published'
+                  {isScheduled(p)
+                    ? `Goes live ${new Date(p.published_at!).toLocaleString()}`
+                    : p.status === 'published'
                     ? `Published ${formatDate(p.published_at)} · ${p.view_count} views`
+                    : p.status === 'pending' && p.published_at
+                    ? `Awaiting review · requested ${new Date(p.published_at).toLocaleString()}`
                     : `Updated ${formatDate(p.updated_at)}`}
                 </p>
 
@@ -129,7 +143,7 @@ export default async function Dashboard() {
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                {p.status === 'published' && (
+                {p.status === 'published' && !isScheduled(p) && (
                   <Link href={`/blog/${p.slug}`} className="btn-ghost btn-sm">View</Link>
                 )}
                 <Link href={`/write?id=${p.id}`} className="btn-ghost btn-sm">

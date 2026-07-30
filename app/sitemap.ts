@@ -13,6 +13,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .from('posts')
       .select('slug, updated_at, published_at')
       .eq('status', 'published')
+      .lte('published_at', new Date().toISOString())
       .order('published_at', { ascending: false })
       .limit(5000),
     supabase.from('forum_categories').select('slug').order('sort_order'),

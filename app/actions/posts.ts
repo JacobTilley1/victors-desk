@@ -17,6 +17,8 @@ interface PostInput {
   contentHtml: string;
   /** Tiptap document, already JSON-stringified by the client. */
   contentJson?: string | null;
+  /** ISO timestamp. A future value schedules the post instead of publishing now. */
+  publishAt?: string | null;
   intent: 'draft' | 'submit';
 }
 
@@ -77,6 +79,17 @@ export async function savePost(input: PostInput): Promise<ActionResult> {
   const status =
     input.intent === 'draft' ? 'draft' : admin ? 'published' : 'pending';
 
+  /*
+   * Scheduling: an approved post with a future published_at stays hidden from
+   * readers until that moment. Writers can request a time; it only takes
+   * effect once an editor approves the post.
+   */
+  const requested = input.publishAt ? new Date(input.publishAt) : null;
+  const scheduledFor =
+    requested && !Number.isNaN(requested.getTime()) && requested.getTime() > Date.now()
+      ? requested.toISOString()
+      : null;
+
   const payload = {
     title,
     team: input.team,
@@ -87,7 +100,13 @@ export async function savePost(input: PostInput): Promise<ActionResult> {
     read_minutes: readingMinutes(input.contentHtml),
     status,
     review_note: null,
-    published_at: status === 'published' ? new Date().toISOString() : null,
+    // Pending posts keep the requested time so approval can honour it.
+    published_at:
+      status === 'published'
+        ? scheduledFor ?? new Date().toISOString()
+        : status === 'pending'
+        ? scheduledFor
+        : null,
   };
 
   if (input.id) {
@@ -108,7 +127,7 @@ export async function savePost(input: PostInput): Promise<ActionResult> {
     revalidatePath(`/blog/${existing.slug}`);
     revalidatePath('/blog');
     revalidatePath('/');
-    return { ok: true, id: input.id, slug: existing.slug, message: label(status) };
+    return { ok: true, id: input.id, slug: existing.slug, message: label(status, scheduledFor) };
   }
 
   const slug = await freeSlug(supabase, title);
@@ -123,13 +142,19 @@ export async function savePost(input: PostInput): Promise<ActionResult> {
   revalidatePath('/dashboard');
   revalidatePath('/blog');
   revalidatePath('/');
-  return { ok: true, id: data!.id, slug: data!.slug, message: label(status) };
+  return { ok: true, id: data!.id, slug: data!.slug, message: label(status, scheduledFor) };
 }
 
-function label(status: string) {
+function label(status: string, scheduledFor?: string | null) {
   if (status === 'draft') return 'Draft saved.';
-  if (status === 'pending') return 'Submitted for editor review.';
-  return 'Published.';
+  if (status === 'pending') {
+    return scheduledFor
+      ? `Submitted for review, scheduled for ${new Date(scheduledFor).toLocaleString()}.`
+      : 'Submitted for editor review.';
+  }
+  return scheduledFor
+    ? `Scheduled for ${new Date(scheduledFor).toLocaleString()}.`
+    : 'Published.';
 }
 
 export async function deletePost(id: string): Promise<ActionResult> {

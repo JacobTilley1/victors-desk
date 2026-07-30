@@ -19,11 +19,25 @@ export async function reviewPost(input: {
   if (!admin) return { ok: false, message: 'Admins only.' };
 
   const supabase = createClient();
+
+  // If the writer asked for a future publish time, approving keeps it —
+  // the post goes live then rather than immediately.
+  const { data: existing } = await supabase
+    .from('posts').select('published_at').eq('id', input.id).maybeSingle();
+  const requested = existing?.published_at ? new Date(existing.published_at) : null;
+  const keepScheduled =
+    requested && !Number.isNaN(requested.getTime()) && requested.getTime() > Date.now();
+
   const { error } = await supabase
     .from('posts')
     .update(
       input.decision === 'approve'
-        ? { status: 'published', published_at: new Date().toISOString(), review_note: null, reviewed_by: admin.id }
+        ? {
+            status: 'published',
+            published_at: keepScheduled ? requested!.toISOString() : new Date().toISOString(),
+            review_note: null,
+            reviewed_by: admin.id,
+          }
         : { status: 'rejected', review_note: input.note?.trim() || 'Not a fit right now.', reviewed_by: admin.id }
     )
     .eq('id', input.id);
