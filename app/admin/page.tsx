@@ -47,15 +47,27 @@ export default async function AdminPage({
   const tab = (searchParams.tab ?? 'queue') as (typeof TABS)[number]['key'];
   const supabase = createClient();
 
+  const EMPTY = { data: [], count: 0 } as { data: unknown[]; count: number };
+
+  /*
+   * Only the tab you're looking at fetches full rows. Badge counts are
+   * head-only queries, which are cheap, so the tab bar stays accurate.
+   */
   const [pendingPosts, applicants, reports, members, livePosts] = await Promise.all([
-    supabase
-      .from('posts')
-      .select('*, author:profiles!posts_author_id_fkey ( id, display_name, avatar_url )')
-      .eq('status', 'pending')
-      .order('updated_at', { ascending: true }),
-    supabase.from('profiles').select('*').eq('author_status', 'pending').order('created_at'),
-    supabase.from('reports').select('*').eq('status', 'open').order('created_at', { ascending: false }),
-    (() => {
+    tab === 'queue'
+      ? supabase
+          .from('posts')
+          .select('*, author:profiles!posts_author_id_fkey ( id, display_name, avatar_url )')
+          .eq('status', 'pending')
+          .order('updated_at', { ascending: true })
+      : EMPTY,
+    tab === 'writers'
+      ? supabase.from('profiles').select('*').eq('author_status', 'pending').order('created_at')
+      : EMPTY,
+    tab === 'reports'
+      ? supabase.from('reports').select('*').eq('status', 'open').order('created_at', { ascending: false })
+      : EMPTY,
+    tab !== 'members' ? EMPTY : (() => {
       const q = (searchParams.q ?? '').trim();
       const page = Math.max(1, Number(searchParams.page ?? '1') || 1);
       const from = (page - 1) * MEMBERS_PER_PAGE;
@@ -67,12 +79,23 @@ export default async function AdminPage({
       if (q) query = query.or(`display_name.ilike.%${q}%,email.ilike.%${q}%`);
       return query;
     })(),
-    supabase
-      .from('posts')
-      .select('*, author:profiles!posts_author_id_fkey ( id, display_name, avatar_url )')
-      .eq('status', 'published')
-      .order('published_at', { ascending: false })
-      .limit(40),
+    tab === 'live'
+      ? supabase
+          .from('posts')
+          .select('*, author:profiles!posts_author_id_fkey ( id, display_name, avatar_url )')
+          .eq('status', 'published')
+          .order('published_at', { ascending: false })
+          .limit(40)
+      : EMPTY,
+  ]);
+
+  // Cheap head-only counts so every tab badge is right regardless of which tab is open.
+  const [queueCount, writerCount, reportCount, memberCount, liveCount] = await Promise.all([
+    supabase.from('posts').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('author_status', 'pending'),
+    supabase.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    supabase.from('posts').select('id', { count: 'exact', head: true }).eq('status', 'published'),
   ]);
 
   const queue = (pendingPosts.data ?? []) as unknown as PostWithAuthor[];
@@ -80,32 +103,42 @@ export default async function AdminPage({
   const openReports = (reports.data ?? []) as Report[];
   const people = (members.data ?? []) as Profile[];
   const published = (livePosts.data ?? []) as unknown as PostWithAuthor[];
-  const memberTotal = members.count ?? people.length;
+  const memberTotal = members.count ?? memberCount.count ?? people.length;
   const memberPage = Math.max(1, Number(searchParams.page ?? '1') || 1);
 
-  // Activity per member, so you can tell lurkers from contributors.
-  const [commentRows, threadRows, replyRows] = await Promise.all([
-    supabase.from('comments').select('author_id'),
-    supabase.from('forum_threads').select('author_id'),
-    supabase.from('forum_replies').select('author_id'),
-  ]);
-
+  /*
+   * Activity per member, so you can tell lurkers from contributors.
+   *
+   * Only runs on the Members tab, and only for the people actually on screen.
+   * Fetching every comment and forum row on every admin page load works at
+   * five members and gets slower forever.
+   */
   const activity = new Map<string, { comments: number; posts: number }>();
-  const bump = (id: string, key: 'comments' | 'posts') => {
-    const row = activity.get(id) ?? { comments: 0, posts: 0 };
-    row[key] += 1;
-    activity.set(id, row);
-  };
-  (commentRows.data ?? []).forEach((r: { author_id: string }) => bump(r.author_id, 'comments'));
-  (threadRows.data ?? []).forEach((r: { author_id: string }) => bump(r.author_id, 'posts'));
-  (replyRows.data ?? []).forEach((r: { author_id: string }) => bump(r.author_id, 'posts'));
+
+  if (tab === 'members' && people.length > 0) {
+    const ids = people.map((m) => m.id);
+    const [commentRows, threadRows, replyRows] = await Promise.all([
+      supabase.from('comments').select('author_id').in('author_id', ids),
+      supabase.from('forum_threads').select('author_id').in('author_id', ids),
+      supabase.from('forum_replies').select('author_id').in('author_id', ids),
+    ]);
+
+    const bump = (id: string, key: 'comments' | 'posts') => {
+      const row = activity.get(id) ?? { comments: 0, posts: 0 };
+      row[key] += 1;
+      activity.set(id, row);
+    };
+    (commentRows.data ?? []).forEach((r: { author_id: string }) => bump(r.author_id, 'comments'));
+    (threadRows.data ?? []).forEach((r: { author_id: string }) => bump(r.author_id, 'posts'));
+    (replyRows.data ?? []).forEach((r: { author_id: string }) => bump(r.author_id, 'posts'));
+  }
 
   const badge: Record<string, number> = {
-    queue: queue.length,
-    writers: apps.length,
-    reports: openReports.length,
-    members: memberTotal,
-    live: published.length,
+    queue: queueCount.count ?? 0,
+    writers: writerCount.count ?? 0,
+    reports: reportCount.count ?? 0,
+    members: memberCount.count ?? 0,
+    live: liveCount.count ?? 0,
   };
 
   return (
