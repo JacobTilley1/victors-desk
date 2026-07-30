@@ -167,12 +167,19 @@ export default async function PostPage({ params }: { params: { slug: string } })
         <div className="field-grain absolute inset-0 opacity-60" />
 
         <div className="container-page relative py-14 sm:py-18">
-          <Link
-            href="/blog"
-            className="mb-6 inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-300 transition hover:text-maize"
-          >
-            <ArrowLeft size={14} /> All stories
-          </Link>
+          {/*
+            Both of these are inline-level, so without the wrapper they sit on
+            the same line and the badge crowds the back link. `w-fit` keeps the
+            link's hit area to its text rather than the full column width.
+          */}
+          <div className="mb-6">
+            <Link
+              href="/blog"
+              className="flex w-fit items-center gap-1.5 text-[13px] font-semibold text-slate-300 transition hover:text-maize"
+            >
+              <ArrowLeft size={14} /> All stories
+            </Link>
+          </div>
 
           <TeamBadge team={post.team} />
 

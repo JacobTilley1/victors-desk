@@ -113,7 +113,7 @@ export default function PostComposer({
           </button>
         </div>
 
-        {preview ? (
+        {preview && (
           <article className="card px-6 py-8 sm:px-10">
             {cover && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -127,9 +127,22 @@ export default function PostComposer({
               dangerouslySetInnerHTML={{ __html: html || '<p class="text-slate-400">Nothing written yet.</p>' }}
             />
           </article>
-        ) : (
-          <RichEditor initialHtml={post?.content_html ?? ''} onChange={(v) => { setHtml(v.html); setJson(v.json); }} onUploadImage={uploadImage} />
         )}
+
+        {/*
+          The editor stays mounted while previewing and is only hidden. Swapping
+          it out destroys the Tiptap instance, and remounting it restored the
+          last *saved* content — so everything written since the last save was
+          lost on the way back from preview. Hiding it also preserves undo
+          history and the cursor position.
+        */}
+        <div className={preview ? 'hidden' : ''}>
+          <RichEditor
+            initialHtml={post?.content_html ?? ''}
+            onChange={(v) => { setHtml(v.html); setJson(v.json); }}
+            onUploadImage={uploadImage}
+          />
+        </div>
       </div>
 
       {/* ---- sidebar ---- */}
