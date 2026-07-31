@@ -14,7 +14,7 @@ import { getPostBySlug } from '@/lib/queries';
 import { getProfile, isAdmin } from '@/lib/auth';
 import { formatDate } from '@/lib/utils';
 import { SITE, SITE_URL, TEAM_LABEL } from '@/lib/constants';
-import { Clock, Eye, PenLine, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { Clock, Eye, PenLine, AlertTriangle } from 'lucide-react';
 import type { CommentWithAuthor, PostWithAuthor } from '@/lib/database.types';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
@@ -128,6 +128,28 @@ export default async function PostPage({ params }: { params: { slug: string } })
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       )}
+      {post.status === 'published' && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'BreadcrumbList',
+              itemListElement: [
+                { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_URL },
+                { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE_URL}/blog` },
+                {
+                  '@type': 'ListItem',
+                  position: 3,
+                  name: TEAM_LABEL[post.team] ?? post.team,
+                  item: `${SITE_URL}/blog?team=${post.team}`,
+                },
+                { '@type': 'ListItem', position: 4, name: post.title },
+              ],
+            }),
+          }}
+        />
+      )}
       {/* status banner for drafts / pending */}
       {post.status !== 'published' && (
         <div className="border-b border-amber-200 bg-amber-50">
@@ -173,14 +195,20 @@ export default async function PostPage({ params }: { params: { slug: string } })
             the same line and the badge crowds the back link. `w-fit` keeps the
             link's hit area to its text rather than the full column width.
           */}
-          <div className="mb-6">
-            <Link
-              href="/blog"
-              className="flex w-fit items-center gap-1.5 text-[13px] font-semibold text-slate-300 transition hover:text-maize"
-            >
-              <ArrowLeft size={14} /> All stories
-            </Link>
-          </div>
+          {/* Visible breadcrumbs, mirroring the BreadcrumbList markup above. */}
+          <nav aria-label="Breadcrumb" className="mb-6">
+            <ol className="flex flex-wrap items-center gap-1.5 text-[13px] font-semibold text-slate-300">
+              <li><Link href="/" className="transition hover:text-maize">Home</Link></li>
+              <li aria-hidden className="text-slate-500">/</li>
+              <li><Link href="/blog" className="transition hover:text-maize">Blog</Link></li>
+              <li aria-hidden className="text-slate-500">/</li>
+              <li>
+                <Link href={`/blog?team=${post.team}`} className="transition hover:text-maize">
+                  {TEAM_LABEL[post.team] ?? post.team}
+                </Link>
+              </li>
+            </ol>
+          </nav>
 
           <TeamBadge team={post.team} />
 
@@ -231,7 +259,7 @@ export default async function PostPage({ params }: { params: { slug: string } })
             initialCount={likeCount ?? 0}
             signedIn={!!profile}
           />
-          <ShareButton title={post.title} />
+          <ShareButton title={post.title} url={`${SITE_URL}/blog/${post.slug}`} />
           <a href="#comments" className="btn-ghost btn-sm">
             {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
           </a>

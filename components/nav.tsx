@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { Menu, X, PenLine, Shield, LayoutGrid, LogOut, User, BarChart3 } from 'lucide-react';
+import { Menu, X, PenLine, Shield, LayoutGrid, LogOut, User, BarChart3, Search as SearchIcon } from 'lucide-react';
 import Logo from '@/components/logo';
 import Avatar from '@/components/avatar';
 import GoogleButton from '@/components/google-button';
@@ -81,6 +81,15 @@ export default function Nav({ profile }: { profile: Profile | null }) {
         </nav>
 
         <div className="flex items-center gap-2">
+          <Link
+            href="/search"
+            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-navy"
+            aria-label="Search"
+            title="Search"
+          >
+            <SearchIcon size={18} />
+          </Link>
+
           {canWrite && (
             <Link href="/write" className="btn-primary btn-sm hidden sm:inline-flex">
               <PenLine size={15} /> Write

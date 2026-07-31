@@ -7,7 +7,7 @@ import TeamBadge from '@/components/team-badge';
 import Avatar from '@/components/avatar';
 import EmptyState from '@/components/empty-state';
 import SubscribeForm from '@/components/subscribe-form';
-import { getPublishedPosts, getRecentThreads, getCommentCounts, getSiteStats } from '@/lib/queries';
+import { getPublishedPosts, getRecentThreads, getCommentCounts, getSiteStats, getMostRead } from '@/lib/queries';
 import { getProfile } from '@/lib/auth';
 import { TEAMS } from '@/lib/constants';
 import { formatDate, relative } from '@/lib/utils';
@@ -17,11 +17,12 @@ export const metadata = {
 };
 
 export default async function HomePage() {
-  const [{ posts }, threads, stats, profile] = await Promise.all([
+  const [{ posts }, threads, stats, profile, mostRead] = await Promise.all([
     getPublishedPosts({ limit: 10 }),
     getRecentThreads(5),
     getSiteStats(),
     getProfile(),
+    getMostRead(5),
   ]);
 
   const counts = await getCommentCounts(posts.map((p) => p.id));
@@ -299,6 +300,37 @@ export default async function HomePage() {
                 <Link href={profile ? '/account' : '/login'} className="btn-primary btn-sm mt-4">
                   {profile ? 'Apply to write' : 'Sign in to apply'}
                 </Link>
+              </div>
+            )}
+
+            {mostRead.length > 0 && (
+              <div className="card overflow-hidden">
+                <div className="flex items-center gap-2 border-b border-[var(--line)] bg-maize px-5 py-3.5">
+                  <Flame size={15} className="text-navy" />
+                  <h3 className="font-display text-[15px] font-bold text-navy">Most read this week</h3>
+                </div>
+                <ol className="divide-y divide-[var(--line)]">
+                  {mostRead.map((entry, i) => (
+                    <li key={entry.post.id}>
+                      <Link
+                        href={`/blog/${entry.post.slug}`}
+                        className="flex gap-3 px-5 py-3.5 transition hover:bg-maize-50/50"
+                      >
+                        <span className="font-display text-[20px] font-bold leading-none text-maize-600">
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block line-clamp-2 text-[14px] font-semibold leading-snug text-navy">
+                            {entry.post.title}
+                          </span>
+                          <span className="mt-1 block text-[11.5px] text-slate-400">
+                            {entry.post.author?.display_name ?? 'Staff'} · {entry.post.read_minutes} min
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ol>
               </div>
             )}
 
