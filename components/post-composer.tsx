@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import RichEditor from '@/components/editor';
 import TeamBadge from '@/components/team-badge';
@@ -37,6 +37,14 @@ export default function PostComposer({
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
+  // Autosave state. postId is tracked locally so the first autosave inserts and
+  // every one after that updates the same row.
+  const [postId, setPostId] = useState<string | undefined>(post?.id);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [autosaving, setAutosaving] = useState(false);
+  const dirty = useRef(false);
+  const inFlight = useRef(false);
+
   async function uploadImage(file: File): Promise<string | null> {
     const supabase = createClient();
     const ext = file.name.split('.').pop() ?? 'jpg';
@@ -66,7 +74,7 @@ export default function PostComposer({
     setMsg(null);
     startTransition(async () => {
       const res = await savePost({
-        id: post?.id,
+        id: postId,
         title,
         team,
         excerpt,
@@ -84,14 +92,74 @@ export default function PostComposer({
         return;
       }
       setMsg({ type: 'ok', text: res.message ?? 'Saved.' });
+      dirty.current = false;
+      setSavedAt(new Date());
+      if (!postId && res.id) setPostId(res.id);
       if (intent === 'submit' && isAdmin && res.slug) {
         router.push(`/blog/${res.slug}`);
       } else {
         router.refresh();
-        if (!post?.id && res.id) router.replace(`/write?id=${res.id}`);
+        if (!postId && res.id) router.replace(`/write?id=${res.id}`);
       }
     });
   }
+
+  /*
+   * Autosave, deliberately limited to drafts.
+   *
+   * Saving with intent 'draft' sets status = 'draft', so running this against a
+   * published or in-review post would silently unpublish it. Anything already
+   * submitted is left alone and saved only when the writer clicks.
+   */
+  const autosaveAllowed = !post || post.status === 'draft';
+
+  useEffect(() => {
+    dirty.current = true;
+  }, [title, team, excerpt, cover, html, publishAt]);
+
+  const autosave = useCallback(async () => {
+    if (!autosaveAllowed || inFlight.current || !dirty.current) return;
+    if (title.trim().length < 4) return;
+    if (html.replace(/<[^>]*>/g, '').trim().length < 40) return;
+
+    inFlight.current = true;
+    setAutosaving(true);
+    try {
+      const res = await savePost({
+        id: postId,
+        title,
+        team,
+        excerpt,
+        coverImageUrl: cover,
+        contentHtml: html,
+        contentJson: json ? JSON.stringify(json) : null,
+        publishAt: publishAt ? new Date(publishAt).toISOString() : null,
+        intent: 'draft',
+      });
+      if (res.ok) {
+        dirty.current = false;
+        setSavedAt(new Date());
+        if (!postId && res.id) setPostId(res.id);
+      }
+    } finally {
+      inFlight.current = false;
+      setAutosaving(false);
+    }
+  }, [autosaveAllowed, postId, title, team, excerpt, cover, html, json, publishAt]);
+
+  useEffect(() => {
+    if (!autosaveAllowed) return;
+    const timer = setInterval(autosave, 20000);
+    return () => clearInterval(timer);
+  }, [autosave, autosaveAllowed]);
+
+  // Best-effort save when the tab is hidden or closed.
+  useEffect(() => {
+    if (!autosaveAllowed) return;
+    const onHide = () => { if (document.visibilityState === 'hidden') autosave(); };
+    document.addEventListener('visibilitychange', onHide);
+    return () => document.removeEventListener('visibilitychange', onHide);
+  }, [autosave, autosaveAllowed]);
 
   const words = html.replace(/<[^>]*>/g, ' ').trim().split(/\s+/).filter(Boolean).length;
 
@@ -112,6 +180,16 @@ export default function PostComposer({
           <span>{words} words</span>
           <span>·</span>
           <span>{readingMinutes(html)} min read</span>
+          {autosaveAllowed && (savedAt || autosaving) && (
+            <>
+              <span>·</span>
+              <span className={autosaving ? 'text-slate-400' : 'text-emerald-600'}>
+                {autosaving
+                  ? 'Saving…'
+                  : `Saved ${savedAt!.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+              </span>
+            </>
+          )}
           <button
             onClick={() => setPreview((v) => !v)}
             className="ml-auto inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-semibold text-navy-500 transition hover:bg-slate-100"
