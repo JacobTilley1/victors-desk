@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Logo from '@/components/logo';
+import SubscribeForm from '@/components/subscribe-form';
 import { SITE, TEAMS } from '@/lib/constants';
 
 export default function Footer() {
@@ -8,6 +9,9 @@ export default function Footer() {
       <div className="field-grain">
         <div className="container-page grid gap-10 py-14 md:grid-cols-4">
           <div className="md:col-span-2">
+            <div className="mb-8">
+              <SubscribeForm source="footer" variant="dark" />
+            </div>
             <Logo light />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-slate-400">
               {SITE.description}

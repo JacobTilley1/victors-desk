@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import Avatar from '@/components/avatar';
 import TeamBadge from '@/components/team-badge';
 import Comments from '@/components/comments';
+import SubscribeForm from '@/components/subscribe-form';
 import LikeButton from '@/components/like-button';
 import ShareButton from '@/components/share-button';
 import PostCard from '@/components/post-card';
@@ -248,6 +249,10 @@ export default async function PostPage({ params }: { params: { slug: string } })
             </div>
           </div>
         )}
+
+        <div className="mt-10">
+          <SubscribeForm source={`post:${post.slug}`} />
+        </div>
 
         <div className="mt-14">
           <Comments postId={post.id} slug={post.slug} comments={comments} viewer={profile} />

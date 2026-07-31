@@ -9,7 +9,7 @@ import {
   WriterToggle,
 } from '@/components/admin-controls';
 import { relative, formatDate } from '@/lib/utils';
-import { Shield, FileClock, UserPlus, Flag, Users, CheckCircle2, Search } from 'lucide-react';
+import { Shield, FileClock, UserPlus, Flag, Users, CheckCircle2, Search, Mail, Download } from 'lucide-react';
 import type { Profile, Report, PostWithAuthor } from '@/lib/database.types';
 
 export const metadata = { title: 'Moderation' };
@@ -22,6 +22,7 @@ const TABS = [
   { key: 'reports',  label: 'Reports',      icon: Flag },
   { key: 'members',  label: 'Members',      icon: Users },
   { key: 'live',     label: 'Published',    icon: CheckCircle2 },
+  { key: 'email',    label: 'Subscribers',  icon: Mail },
 ] as const;
 
 export default async function AdminPage({
@@ -53,7 +54,7 @@ export default async function AdminPage({
    * Only the tab you're looking at fetches full rows. Badge counts are
    * head-only queries, which are cheap, so the tab bar stays accurate.
    */
-  const [pendingPosts, applicants, reports, members, livePosts] = await Promise.all([
+  const [pendingPosts, applicants, reports, members, livePosts, subs] = await Promise.all([
     tab === 'queue'
       ? supabase
           .from('posts')
@@ -87,15 +88,23 @@ export default async function AdminPage({
           .order('published_at', { ascending: false })
           .limit(40)
       : EMPTY,
+    tab === 'email'
+      ? supabase
+          .from('subscribers')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(500)
+      : EMPTY,
   ]);
 
   // Cheap head-only counts so every tab badge is right regardless of which tab is open.
-  const [queueCount, writerCount, reportCount, memberCount, liveCount] = await Promise.all([
+  const [queueCount, writerCount, reportCount, memberCount, liveCount, subCount] = await Promise.all([
     supabase.from('posts').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('author_status', 'pending'),
     supabase.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'open'),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('posts').select('id', { count: 'exact', head: true }).eq('status', 'published'),
+    supabase.from('subscribers').select('id', { count: 'exact', head: true }).eq('is_active', true),
   ]);
 
   const queue = (pendingPosts.data ?? []) as unknown as PostWithAuthor[];
@@ -103,6 +112,9 @@ export default async function AdminPage({
   const openReports = (reports.data ?? []) as Report[];
   const people = (members.data ?? []) as Profile[];
   const published = (livePosts.data ?? []) as unknown as PostWithAuthor[];
+  const subscribers = (subs.data ?? []) as unknown as {
+    id: string; email: string; source: string | null; is_active: boolean; created_at: string;
+  }[];
   const memberTotal = members.count ?? memberCount.count ?? people.length;
   const memberPage = Math.max(1, Number(searchParams.page ?? '1') || 1);
 
@@ -139,6 +151,7 @@ export default async function AdminPage({
     reports: reportCount.count ?? 0,
     members: memberCount.count ?? 0,
     live: liveCount.count ?? 0,
+    email: subCount.count ?? 0,
   };
 
   return (
@@ -350,6 +363,44 @@ export default async function AdminPage({
               )}
             </nav>
           )}
+        </>
+      )}
+
+      {/* ---------- SUBSCRIBERS ---------- */}
+      {tab === 'email' && (
+        <>
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="font-display text-[20px] font-bold text-navy">Mailing list</h2>
+              <p className="mt-0.5 text-[13px] text-slate-500">
+                {subCount.count ?? 0} active {(subCount.count ?? 0) === 1 ? 'subscriber' : 'subscribers'}
+              </p>
+            </div>
+            <a href="/api/subscribers" className="btn-navy btn-sm">
+              <Download size={14} /> Export CSV
+            </a>
+          </div>
+
+          <Section
+            title=""
+            empty={subscribers.length === 0}
+            emptyText="Nobody has subscribed yet. The form is in the footer, on the home page, and under every article."
+          >
+            {subscribers.map((sub) => (
+              <div key={sub.id} className="flex flex-wrap items-center gap-4 p-4">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14.5px] font-semibold text-navy">{sub.email}</p>
+                  <p className="text-[12px] text-slate-400">
+                    Joined {formatDate(sub.created_at)}
+                    {sub.source ? ` · via ${sub.source}` : ''}
+                  </p>
+                </div>
+                {!sub.is_active && (
+                  <span className="chip bg-slate-200 text-slate-600">Unsubscribed</span>
+                )}
+              </div>
+            ))}
+          </Section>
         </>
       )}
 

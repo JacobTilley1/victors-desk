@@ -6,6 +6,7 @@ import SectionHeading from '@/components/section-heading';
 import TeamBadge from '@/components/team-badge';
 import Avatar from '@/components/avatar';
 import EmptyState from '@/components/empty-state';
+import SubscribeForm from '@/components/subscribe-form';
 import { getPublishedPosts, getRecentThreads, getCommentCounts, getSiteStats } from '@/lib/queries';
 import { getProfile } from '@/lib/auth';
 import { TEAMS } from '@/lib/constants';
@@ -300,6 +301,8 @@ export default async function HomePage() {
                 </Link>
               </div>
             )}
+
+            <SubscribeForm source="home" />
 
             <div className="card p-5">
               <h3 className="font-display text-[15px] font-bold text-navy">Browse by sport</h3>

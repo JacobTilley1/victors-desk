@@ -85,6 +85,12 @@ export default function PrivacyPage() {
           except for drafts, is public.
         </P>
         <P>
+          <strong>If you subscribe to the newsletter</strong>, we store the email address you
+          give us and where on the site you signed up. That address is used only to send you
+          the newsletter. Every email includes an unsubscribe link, and you can ask us to
+          delete the address entirely at any time.
+        </P>
+        <P>
           <strong>Technical data</strong> collected automatically includes pages viewed,
           approximate location at country or region level, device and browser type, and
           referring site.
