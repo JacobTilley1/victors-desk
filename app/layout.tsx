@@ -60,6 +60,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         name: SITE.name,
         url: SITE_URL,
         description: SITE.description,
+        founder: { '@type': 'Person', name: 'Jacob Tilley' },
+        sameAs: [`${SITE_URL}/about`],
       },
       {
         '@type': 'WebSite',
