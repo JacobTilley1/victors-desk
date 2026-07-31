@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { addToKit } from '@/lib/email/kit';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
@@ -29,10 +30,21 @@ export async function subscribe(input: {
     .from('subscribers')
     .insert({ email, source: input.source?.slice(0, 120) ?? null });
 
-  if (error) {
-    // 23505 = unique violation, i.e. already subscribed.
-    if (error.code === '23505') return { ok: true, message: "You're on the list." };
+  // 23505 = unique violation, i.e. already subscribed.
+  const alreadyKnown = error?.code === '23505';
+
+  if (error && !alreadyKnown) {
     return { ok: false, message: 'Something went wrong. Try again in a moment.' };
+  }
+
+  /*
+   * Push to Kit second, and never let it fail the signup. Supabase is the list
+   * we own; Kit is just how we send. Re-sending a known address is harmless —
+   * Kit treats it as an update.
+   */
+  const kit = await addToKit(email);
+  if (!kit.ok && kit.error !== 'not-configured') {
+    console.error('[kit] subscribe failed', email, kit.status, kit.error);
   }
 
   return { ok: true, message: "You're on the list." };
