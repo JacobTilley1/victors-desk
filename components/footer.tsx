@@ -47,6 +47,7 @@ export default function Footer() {
               <li><Link href="/account" className="text-slate-400 transition hover:text-maize">Write for us</Link></li>
               <li><Link href="/guidelines" className="text-slate-400 transition hover:text-maize">Community rules</Link></li>
               <li><Link href="/privacy" className="text-slate-400 transition hover:text-maize">Privacy policy</Link></li>
+              <li><a href="/feed.xml" className="text-slate-400 transition hover:text-maize">RSS feed</a></li>
             </ul>
           </div>
         </div>

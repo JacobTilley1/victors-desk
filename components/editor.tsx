@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -9,7 +9,9 @@ import Placeholder from '@tiptap/extension-placeholder';
 import {
   Bold, Italic, Strikethrough, Heading2, Heading3, List, ListOrdered,
   Quote, Code2, Minus, Link2, Link2Off, ImagePlus, Undo2, Redo2,
+  Search, Text as TextIcon,
 } from 'lucide-react';
+import ImagePicker, { type PickedPhoto } from '@/components/image-picker';
 
 export interface EditorHandleValue {
   html: string;
@@ -35,6 +37,7 @@ export default function RichEditor({
   onChange: (value: EditorHandleValue) => void;
   onUploadImage?: (file: File) => Promise<string | null>;
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -85,14 +88,42 @@ export default function RichEditor({
         const file = input.files?.[0];
         if (!file) return;
         const url = await onUploadImage(file);
-        if (url) editor.chain().focus().setImage({ src: url }).run();
+        if (!url) return;
+        const alt = window.prompt(
+          'Describe this image for screen readers and search engines:',
+          ''
+        );
+        editor.chain().focus().setImage({ src: url, alt: alt?.trim() || undefined }).run();
       };
       input.click();
       return;
     }
     const url = window.prompt('Image URL');
-    if (url) editor.chain().focus().setImage({ src: url }).run();
+    if (!url) return;
+    const alt = window.prompt('Describe this image:', '');
+    editor.chain().focus().setImage({ src: url, alt: alt?.trim() || undefined }).run();
   }, [editor, onUploadImage]);
+
+  /** Edit the alt text of whichever image is currently selected. */
+  const editAlt = useCallback(() => {
+    if (!editor || !editor.isActive('image')) return;
+    const current = (editor.getAttributes('image').alt as string) ?? '';
+    const alt = window.prompt('Alt text — describe the image:', current);
+    if (alt === null) return;
+    editor.chain().focus().updateAttributes('image', { alt: alt.trim() }).run();
+  }, [editor]);
+
+  /** Insert a stock photo along with its credit line. */
+  const insertStock = useCallback((photo: PickedPhoto) => {
+    if (!editor) return;
+    editor
+      .chain()
+      .focus()
+      .setImage({ src: photo.full, alt: photo.alt })
+      .createParagraphNear()
+      .insertContent(`<p><em>Photo by ${photo.photographer} via Pexels</em></p>`)
+      .run();
+  }, [editor]);
 
   if (!editor) {
     return <div className="h-[520px] animate-pulse rounded-2xl bg-slate-100" />;
@@ -120,7 +151,11 @@ export default function RichEditor({
         <Sep />
         <Btn ed={editor} cmd={setLink} on="link" label="Add link"><Link2 size={16} /></Btn>
         <Btn ed={editor} cmd={() => editor.chain().focus().unsetLink().run()} label="Remove link"><Link2Off size={16} /></Btn>
-        <Btn ed={editor} cmd={addImage} label="Insert image"><ImagePlus size={16} /></Btn>
+        <Btn ed={editor} cmd={addImage} label="Upload image"><ImagePlus size={16} /></Btn>
+        <Btn ed={editor} cmd={() => setPickerOpen(true)} label="Find a free photo"><Search size={16} /></Btn>
+        {editor.isActive('image') && (
+          <Btn ed={editor} cmd={editAlt} label="Edit alt text"><TextIcon size={16} /></Btn>
+        )}
         <Btn ed={editor} cmd={() => editor.chain().focus().setHorizontalRule().run()} label="Divider"><Minus size={16} /></Btn>
         <Sep />
         <Btn ed={editor} cmd={() => editor.chain().focus().undo().run()} label="Undo"><Undo2 size={16} /></Btn>
@@ -136,6 +171,12 @@ export default function RichEditor({
       <div className="max-h-[calc(100vh-15rem)] min-h-[460px] overflow-y-auto px-6 py-6 sm:px-9 sm:py-8">
         <EditorContent editor={editor} />
       </div>
+
+      <ImagePicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={insertStock}
+      />
     </div>
   );
 }
