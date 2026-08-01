@@ -13,6 +13,7 @@ const LINKS = [
   { href: '/', label: 'Home' },
   { href: '/blog', label: 'Blog' },
   { href: '/forum', label: 'Forum' },
+  { href: '/history', label: 'History' },
   { href: '/authors', label: 'Writers' },
 ];
 

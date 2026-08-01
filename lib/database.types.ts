@@ -102,3 +102,33 @@ export type ThreadWithMeta = ForumThread & {
 export type ReplyWithAuthor = ForumReply & {
   author: Pick<Profile, 'id' | 'display_name' | 'avatar_url' | 'role'> | null;
 };
+
+export interface HistoryPage {
+  id: string;
+  slug: string;
+  title: string;
+  subtitle: string | null;
+  intro_html: string;
+  hero_image_url: string | null;
+  kicker: string | null;
+  sort_order: number;
+  updated_at: string;
+}
+
+export interface HistoryEntry {
+  id: string;
+  page_id: string;
+  year: number;
+  title: string | null;
+  record: string | null;
+  result: 'W' | 'L' | 'T' | null;
+  points_for: number | null;
+  points_against: number | null;
+  opponent: string | null;
+  venue: string | null;
+  coach: string | null;
+  summary_html: string;
+  is_highlight: boolean;
+  created_at: string;
+  updated_at: string;
+}
