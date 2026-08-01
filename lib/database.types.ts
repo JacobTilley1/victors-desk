@@ -3,7 +3,7 @@ export type AuthorStatus = 'none' | 'pending' | 'approved' | 'rejected';
 export type PostStatus = 'draft' | 'pending' | 'published' | 'rejected';
 export type Team =
   | 'football' | 'basketball' | 'hockey' | 'baseball'
-  | 'olympic' | 'recruiting' | 'opinion';
+  | 'olympic' | 'recruiting' | 'bigten' | 'opinion';
 
 export interface Profile {
   id: string;

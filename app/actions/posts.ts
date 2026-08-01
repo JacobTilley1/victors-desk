@@ -68,7 +68,13 @@ export async function savePost(input: PostInput): Promise<ActionResult> {
 
   const title = input.title.trim();
   if (title.length < 4) return { ok: false, message: 'Give the post a real headline.' };
-  if (input.contentHtml.replace(/<[^>]*>/g, '').trim().length < 40) {
+
+  // Length is only enforced when actually submitting. Drafts save at any size,
+  // otherwise autosave can't protect the first few sentences someone writes.
+  if (
+    input.intent === 'submit' &&
+    input.contentHtml.replace(/<[^>]*>/g, '').trim().length < 40
+  ) {
     return { ok: false, message: 'The post is too short to submit.' };
   }
 

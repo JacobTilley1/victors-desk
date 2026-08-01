@@ -11,7 +11,39 @@ import { excerptFrom, readingMinutes } from '@/lib/utils';
 import type { Post, Team } from '@/lib/database.types';
 import {
   Save, Send, Eye, EyeOff, ImageIcon, Loader2, CheckCircle2, AlertCircle, Upload, CalendarClock,
+  History,
 } from 'lucide-react';
+
+/**
+ * Everything typed is mirrored to localStorage on every keystroke.
+ *
+ * Server autosave still runs, but it can't protect against a navigation that
+ * happens before the first save, a crash, or a closed tab. The local copy
+ * survives all of those and is restored on the way back in.
+ */
+interface LocalDraft {
+  title: string;
+  team: Team;
+  excerpt: string;
+  cover: string;
+  html: string;
+  publishAt: string;
+  savedAt: number;
+}
+
+function draftKey(id?: string) {
+  return `vd:draft:${id ?? 'new'}`;
+}
+
+function readLocalDraft(id?: string): LocalDraft | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(draftKey(id));
+    return raw ? (JSON.parse(raw) as LocalDraft) : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function PostComposer({
   post,
@@ -20,15 +52,24 @@ export default function PostComposer({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const [title, setTitle] = useState(post?.title ?? '');
-  const [team, setTeam] = useState<Team>(post?.team ?? 'football');
-  const [excerpt, setExcerpt] = useState(post?.excerpt ?? '');
-  const [cover, setCover] = useState(post?.cover_image_url ?? '');
-  const [html, setHtml] = useState(post?.content_html ?? '');
+  // A local draft newer than the saved version wins — that's unsaved work.
+  const cached = typeof window !== 'undefined' ? readLocalDraft(post?.id) : null;
+  const serverSavedAt = post?.updated_at ? new Date(post.updated_at).getTime() : 0;
+  const restore = cached && cached.savedAt > serverSavedAt ? cached : null;
+
+  const [restoredFrom, setRestoredFrom] = useState<number | null>(restore?.savedAt ?? null);
+  const [title, setTitle] = useState(restore?.title ?? post?.title ?? '');
+  const [team, setTeam] = useState<Team>(restore?.team ?? post?.team ?? 'football');
+  const [excerpt, setExcerpt] = useState(restore?.excerpt ?? post?.excerpt ?? '');
+  const [cover, setCover] = useState(restore?.cover ?? post?.cover_image_url ?? '');
+  const [html, setHtml] = useState(restore?.html ?? post?.content_html ?? '');
   const [json, setJson] = useState<unknown>(post?.content_json ?? null);
+  // Captured once so the editor mounts with whatever was restored.
+  const [initialEditorHtml] = useState(restore?.html ?? post?.content_html ?? '');
   const [preview, setPreview] = useState(false);
   // datetime-local wants "YYYY-MM-DDTHH:mm" in the browser's own timezone.
   const [publishAt, setPublishAt] = useState(() => {
+    if (restore?.publishAt) return restore.publishAt;
     const at = post?.published_at ? new Date(post.published_at) : null;
     if (!at || Number.isNaN(at.getTime()) || at.getTime() <= Date.now()) return '';
     const local = new Date(at.getTime() - at.getTimezoneOffset() * 60000);
@@ -94,12 +135,25 @@ export default function PostComposer({
       setMsg({ type: 'ok', text: res.message ?? 'Saved.' });
       dirty.current = false;
       setSavedAt(new Date());
+      setRestoredFrom(null);
       if (!postId && res.id) setPostId(res.id);
+      if (intent === 'submit') {
+        try {
+          window.localStorage.removeItem(draftKey(res.id ?? postId));
+          window.localStorage.removeItem(draftKey(undefined));
+        } catch { /* ignore */ }
+      }
       if (intent === 'submit' && isAdmin && res.slug) {
         router.push(`/blog/${res.slug}`);
       } else {
-        router.refresh();
-        if (!postId && res.id) router.replace(`/write?id=${res.id}`);
+        /*
+         * Update the address bar without a Next.js navigation. router.replace
+         * re-runs the page and can remount the editor, which is one of the ways
+         * in-progress work disappeared.
+         */
+        if (!postId && res.id) {
+          window.history.replaceState(null, '', `/write?id=${res.id}`);
+        }
       }
     });
   }
@@ -115,12 +169,24 @@ export default function PostComposer({
 
   useEffect(() => {
     dirty.current = true;
-  }, [title, team, excerpt, cover, html, publishAt]);
+    try {
+      const payload: LocalDraft = {
+        title, team, excerpt, cover, html, publishAt, savedAt: Date.now(),
+      };
+      window.localStorage.setItem(draftKey(postId), JSON.stringify(payload));
+      // A brand-new post also writes under the "new" key until it has an id,
+      // so nothing is stranded if the first save hasn't happened yet.
+      if (postId) window.localStorage.removeItem(draftKey(undefined));
+    } catch {
+      // Storage full or blocked — the server autosave still covers us.
+    }
+  }, [title, team, excerpt, cover, html, publishAt, postId]);
 
   const autosave = useCallback(async () => {
     if (!autosaveAllowed || inFlight.current || !dirty.current) return;
+    // Only a headline is required — waiting for a word count is how work got
+    // lost before the first save ever happened.
     if (title.trim().length < 4) return;
-    if (html.replace(/<[^>]*>/g, '').trim().length < 40) return;
 
     inFlight.current = true;
     setAutosaving(true);
@@ -149,7 +215,7 @@ export default function PostComposer({
 
   useEffect(() => {
     if (!autosaveAllowed) return;
-    const timer = setInterval(autosave, 20000);
+    const timer = setInterval(autosave, 5000);
     return () => clearInterval(timer);
   }, [autosave, autosaveAllowed]);
 
@@ -160,6 +226,16 @@ export default function PostComposer({
     document.addEventListener('visibilitychange', onHide);
     return () => document.removeEventListener('visibilitychange', onHide);
   }, [autosave, autosaveAllowed]);
+
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!dirty.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, []);
 
   const words = html.replace(/<[^>]*>/g, ' ').trim().split(/\s+/).filter(Boolean).length;
 
@@ -224,7 +300,7 @@ export default function PostComposer({
         */}
         <div className={preview ? 'hidden' : ''}>
           <RichEditor
-            initialHtml={post?.content_html ?? ''}
+            initialHtml={initialEditorHtml}
             onChange={(v) => { setHtml(v.html); setJson(v.json); }}
             onUploadImage={uploadImage}
           />
@@ -233,6 +309,19 @@ export default function PostComposer({
 
       {/* ---- sidebar ---- */}
       <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+        {restoredFrom && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            <History size={16} className="mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold">Unsaved work restored</p>
+              <p className="mt-0.5 text-[13px] leading-relaxed">
+                Recovered from {new Date(restoredFrom).toLocaleString()}. Save when you&rsquo;re
+                happy with it.
+              </p>
+            </div>
+          </div>
+        )}
+
         {msg && (
           <div
             className={`flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm font-medium ${

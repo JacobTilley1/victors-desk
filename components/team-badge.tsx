@@ -8,6 +8,7 @@ const STYLES: Record<Team, string> = {
   baseball:   'bg-emerald-100 text-emerald-800',
   olympic:    'bg-slate-200 text-slate-700',
   recruiting: 'bg-maize-100 text-navy-700',
+  bigten:     'bg-indigo-100 text-indigo-800',
   opinion:    'bg-rose-100 text-rose-800',
 };
 

@@ -22,6 +22,7 @@ export const TEAMS: { value: Team; label: string; short: string }[] = [
   { value: 'baseball',   label: 'Baseball',    short: 'BSB' },
   { value: 'olympic',    label: 'Olympic Sports', short: 'OLY' },
   { value: 'recruiting', label: 'Recruiting',  short: 'REC' },
+  { value: 'bigten',     label: 'Big Ten',     short: 'B1G' },
   { value: 'opinion',    label: 'Opinion',     short: 'OPN' },
 ];
 
