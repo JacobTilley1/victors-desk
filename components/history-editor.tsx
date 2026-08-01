@@ -42,6 +42,7 @@ const BLANK = {
   opponent: '',
   venue: '',
   coach: '',
+  postseason: '',
   summaryHtml: '',
   isHighlight: false,
 };
@@ -51,6 +52,9 @@ export default function HistoryEditor({
   entries,
 }: { page: HistoryPage; entries: HistoryEntry[] }) {
   const router = useRouter();
+
+  // A season and a single game need different fields. The page decides which.
+  const isRivalry = page.kind === 'rivalry';
 
   // ---- page details ----
   const [title, setTitle] = useState(page.title);
@@ -81,6 +85,7 @@ export default function HistoryEditor({
       opponent: e.opponent ?? '',
       venue: e.venue ?? '',
       coach: e.coach ?? '',
+      postseason: e.postseason ?? '',
       summaryHtml: e.summary_html,
       isHighlight: e.is_highlight,
     });
@@ -197,61 +202,82 @@ export default function HistoryEditor({
               </div>
             </div>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-4">
-              <div>
-                <label className="label">Season record</label>
-                <input
-                  value={form.record}
-                  onChange={(e) => set('record', e.target.value)}
-                  placeholder="10-2"
-                  className="input"
-                />
-              </div>
-              <div>
-                <label className="label">Result</label>
-                <select
-                  value={form.result}
-                  onChange={(e) => set('result', e.target.value as 'W' | 'L' | 'T' | '')}
-                  className="input"
-                >
-                  <option value="">—</option>
-                  <option value="W">Win</option>
-                  <option value="L">Loss</option>
-                  <option value="T">Tie</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Michigan pts</label>
-                <input
-                  value={form.pointsFor}
-                  onChange={(e) => set('pointsFor', e.target.value)}
-                  className="input"
-                />
-              </div>
-              <div>
-                <label className="label">Opponent pts</label>
-                <input
-                  value={form.pointsAgainst}
-                  onChange={(e) => set('pointsAgainst', e.target.value)}
-                  className="input"
-                />
-              </div>
-            </div>
+            {isRivalry ? (
+              <>
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="label">Result</label>
+                    <select
+                      value={form.result}
+                      onChange={(e) => set('result', e.target.value as 'W' | 'L' | 'T' | '')}
+                      className="input"
+                    >
+                      <option value="">—</option>
+                      <option value="W">Michigan won</option>
+                      <option value="L">Michigan lost</option>
+                      <option value="T">Tied</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Michigan points</label>
+                    <input
+                      value={form.pointsFor}
+                      onChange={(e) => set('pointsFor', e.target.value)}
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Opponent points</label>
+                    <input
+                      value={form.pointsAgainst}
+                      onChange={(e) => set('pointsAgainst', e.target.value)}
+                      className="input"
+                    />
+                  </div>
+                </div>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              <div>
-                <label className="label">Opponent</label>
-                <input value={form.opponent} onChange={(e) => set('opponent', e.target.value)} className="input" />
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="label">Venue</label>
+                    <input
+                      value={form.venue}
+                      onChange={(e) => set('venue', e.target.value)}
+                      placeholder="Michigan Stadium"
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Michigan head coach</label>
+                    <input value={form.coach} onChange={(e) => set('coach', e.target.value)} className="input" />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="label">Season record</label>
+                  <input
+                    value={form.record}
+                    onChange={(e) => set('record', e.target.value)}
+                    placeholder="10-2"
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="label">Head coach</label>
+                  <input value={form.coach} onChange={(e) => set('coach', e.target.value)} className="input" />
+                </div>
+                <div>
+                  <label className="label">Postseason</label>
+                  <input
+                    value={form.postseason}
+                    onChange={(e) => set('postseason', e.target.value)}
+                    placeholder="Rose Bowl, W 21-16"
+                    className="input"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="label">Venue</label>
-                <input value={form.venue} onChange={(e) => set('venue', e.target.value)} className="input" />
-              </div>
-              <div>
-                <label className="label">Coach</label>
-                <input value={form.coach} onChange={(e) => set('coach', e.target.value)} className="input" />
-              </div>
-            </div>
+            )}
 
             <label className="label mt-5">Write-up</label>
             <RichEditor
@@ -303,7 +329,10 @@ export default function HistoryEditor({
                     {e.title || <span className="text-slate-400">Untitled</span>}
                   </p>
                   <p className="text-[12px] text-slate-400">
-                    {[e.record, e.result && `${e.result} ${e.points_for ?? ''}-${e.points_against ?? ''}`, e.coach]
+                    {(isRivalry
+                      ? [e.result && `${e.result} ${e.points_for ?? ''}-${e.points_against ?? ''}`, e.venue, e.coach]
+                      : [e.record, e.postseason, e.coach]
+                    )
                       .filter(Boolean)
                       .join(' · ') || '—'}
                   </p>

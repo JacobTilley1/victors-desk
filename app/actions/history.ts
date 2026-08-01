@@ -51,6 +51,7 @@ export async function saveHistoryEntry(input: {
   opponent: string;
   venue: string;
   coach: string;
+  postseason: string;
   summaryHtml: string;
   isHighlight: boolean;
 }) {
@@ -72,6 +73,7 @@ export async function saveHistoryEntry(input: {
     opponent: input.opponent.trim() || null,
     venue: input.venue.trim() || null,
     coach: input.coach.trim() || null,
+    postseason: input.postseason.trim() || null,
     summary_html: input.summaryHtml,
     is_highlight: input.isHighlight,
   };

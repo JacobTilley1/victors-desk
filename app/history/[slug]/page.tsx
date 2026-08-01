@@ -42,7 +42,7 @@ export default async function HistoryPageView({
   const profile = await getProfile();
   const admin = isAdmin(profile);
 
-  const isRivalry = entries.some((e) => e.result !== null);
+  const isRivalry = page.kind === 'rivalry';
   const record = seriesRecord(entries);
   const decades = byDecade(entries);
   const years = entries.map((e) => e.year);
@@ -278,9 +278,14 @@ function EntryRow({ entry, isRivalry }: { entry: HistoryEntry; isRivalry: boolea
             )}
           </div>
 
-          {(entry.coach || entry.venue || entry.opponent) && (
+          {(entry.coach || entry.venue || entry.opponent || entry.postseason) && (
             <p className="mt-1 text-[12.5px] text-slate-400">
-              {[entry.opponent, entry.venue, entry.coach && `Coach: ${entry.coach}`]
+              {[
+                entry.opponent,
+                entry.venue,
+                entry.postseason,
+                entry.coach && `Coach: ${entry.coach}`,
+              ]
                 .filter(Boolean)
                 .join(' · ')}
             </p>

@@ -103,9 +103,12 @@ export type ReplyWithAuthor = ForumReply & {
   author: Pick<Profile, 'id' | 'display_name' | 'avatar_url' | 'role'> | null;
 };
 
+export type HistoryKind = 'season' | 'rivalry';
+
 export interface HistoryPage {
   id: string;
   slug: string;
+  kind: HistoryKind;
   title: string;
   subtitle: string | null;
   intro_html: string;
@@ -127,6 +130,7 @@ export interface HistoryEntry {
   opponent: string | null;
   venue: string | null;
   coach: string | null;
+  postseason: string | null;
   summary_html: string;
   is_highlight: boolean;
   created_at: string;
