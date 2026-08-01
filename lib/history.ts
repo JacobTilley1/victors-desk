@@ -54,3 +54,73 @@ export function byDecade(entries: HistoryEntry[]) {
   });
   return Array.from(map.entries()).sort((a, b) => b[0] - a[0]);
 }
+
+
+/** A single entry plus its page, for the individual entry route. */
+export async function getHistoryEntry(slug: string, year: number) {
+  const supabase = createPublicClient(120);
+
+  const { data: page } = await supabase
+    .from('history_pages').select('*').eq('slug', slug).maybeSingle();
+  if (!page) return null;
+
+  const { data: rows } = await supabase
+    .from('history_entries')
+    .select('*')
+    .eq('page_id', (page as HistoryPage).id)
+    .eq('year', year)
+    .limit(1);
+
+  const entry = (rows ?? [])[0] as HistoryEntry | undefined;
+  if (!entry) return null;
+
+  // Neighbouring years, for prev/next links. These also give crawlers a path
+  // through every entry without relying on the index page alone.
+  const [{ data: olderRows }, { data: newerRows }] = await Promise.all([
+    supabase
+      .from('history_entries')
+      .select('year, title')
+      .eq('page_id', (page as HistoryPage).id)
+      .lt('year', year)
+      .order('year', { ascending: false })
+      .limit(1),
+    supabase
+      .from('history_entries')
+      .select('year, title')
+      .eq('page_id', (page as HistoryPage).id)
+      .gt('year', year)
+      .order('year', { ascending: true })
+      .limit(1),
+  ]);
+
+  return {
+    page: page as HistoryPage,
+    entry,
+    older: (olderRows ?? [])[0] as { year: number; title: string | null } | undefined,
+    newer: (newerRows ?? [])[0] as { year: number; title: string | null } | undefined,
+  };
+}
+
+/** Every entry URL, for the sitemap. */
+export async function getAllHistoryEntryPaths() {
+  const supabase = createPublicClient(900);
+  const { data } = await supabase
+    .from('history_entries')
+    .select('year, updated_at, page:history_pages!history_entries_page_id_fkey ( slug )')
+    .order('year', { ascending: false })
+    .limit(2000);
+
+  return ((data ?? []) as unknown as {
+    year: number;
+    updated_at: string;
+    page: { slug: string } | null;
+  }[])
+    .filter((r) => r.page?.slug)
+    .map((r) => ({ slug: r.page!.slug, year: r.year, updatedAt: r.updated_at }));
+}
+
+/** Plain-text teaser from an entry's write-up. */
+export function entryTeaser(html: string, length = 180) {
+  const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return text.length > length ? `${text.slice(0, length).trimEnd()}\u2026` : text;
+}

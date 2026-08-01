@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { createPublicClient } from '@/lib/supabase/public';
 import { SITE_URL } from '@/lib/constants';
+import { getAllHistoryEntryPaths } from '@/lib/history';
 
 // Rebuild the sitemap at most once an hour.
 export const revalidate = 3600;
@@ -8,7 +9,7 @@ export const revalidate = 3600;
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createPublicClient();
 
-  const [posts, categories, threads, authors] = await Promise.all([
+  const [posts, categories, threads, authors, historyEntries] = await Promise.all([
     supabase
       .from('posts')
       .select('slug, updated_at, published_at')
@@ -28,6 +29,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .select('id')
       .in('role', ['author', 'admin'])
       .eq('is_banned', false),
+    getAllHistoryEntryPaths(),
   ]);
 
   const now = new Date();
@@ -91,8 +93,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })
   );
 
+  const historyRoutes: MetadataRoute.Sitemap = historyEntries.map((h) => ({
+    url: `${SITE_URL}/history/${h.slug}/${h.year}`,
+    lastModified: new Date(h.updatedAt ?? now),
+    changeFrequency: 'yearly' as const,
+    priority: 0.7,
+  }));
+
   return [
     ...staticRoutes,
+    ...historyRoutes,
     ...postRoutes,
     ...categoryRoutes,
     ...threadRoutes,

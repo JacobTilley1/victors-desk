@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { getHistoryPage, seriesRecord, byDecade, isRivalryPage } from '@/lib/history';
+import { getHistoryPage, seriesRecord, byDecade, isRivalryPage, entryTeaser } from '@/lib/history';
 import { getProfile, isAdmin } from '@/lib/auth';
 import { SITE, SITE_URL } from '@/lib/constants';
-import { ArrowLeft, PenLine, Star, CalendarDays } from 'lucide-react';
+import { ArrowLeft, ArrowRight, PenLine, Star, CalendarDays } from 'lucide-react';
 import type { HistoryEntry } from '@/lib/database.types';
 
 export async function generateMetadata({
@@ -196,7 +196,7 @@ export default async function HistoryPageView({
 
                 <div className="space-y-3">
                   {rows.map((e) => (
-                    <EntryRow key={e.id} entry={e} isRivalry={isRivalry} />
+                    <EntryRow key={e.id} entry={e} isRivalry={isRivalry} slug={page.slug} />
                   ))}
                 </div>
               </div>
@@ -228,7 +228,9 @@ function Figure({ value, label, accent }: { value: number; label: string; accent
   );
 }
 
-function EntryRow({ entry, isRivalry }: { entry: HistoryEntry; isRivalry: boolean }) {
+function EntryRow({
+  entry, isRivalry, slug,
+}: { entry: HistoryEntry; isRivalry: boolean; slug: string }) {
   const resultStyle =
     entry.result === 'W'
       ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
@@ -237,9 +239,10 @@ function EntryRow({ entry, isRivalry }: { entry: HistoryEntry; isRivalry: boolea
       : 'bg-slate-100 text-slate-600 border-slate-200';
 
   return (
-    <article
+    <Link
+      href={`/history/${slug}/${entry.year}`}
       id={`y${entry.year}`}
-      className={`card scroll-mt-[140px] overflow-hidden transition hover:border-maize/60 ${
+      className={`group card block scroll-mt-[140px] overflow-hidden transition hover:-translate-y-0.5 hover:border-maize ${
         entry.is_highlight ? 'border-maize shadow-glow' : ''
       }`}
     >
@@ -272,7 +275,7 @@ function EntryRow({ entry, isRivalry }: { entry: HistoryEntry; isRivalry: boolea
               </span>
             )}
             {entry.title && (
-              <h3 className="font-display text-[18px] font-bold leading-snug text-navy">
+              <h3 className="font-display text-[18px] font-bold leading-snug text-navy transition group-hover:text-navy-500">
                 {entry.title}
               </h3>
             )}
@@ -292,13 +295,17 @@ function EntryRow({ entry, isRivalry }: { entry: HistoryEntry; isRivalry: boolea
           )}
 
           {entry.summary_html && (
-            <div
-              className="prose-mich mt-2.5 text-[15px] [&_p]:my-2"
-              dangerouslySetInnerHTML={{ __html: entry.summary_html }}
-            />
+            <p className="mt-2 line-clamp-2 text-[14.5px] leading-relaxed text-slate-600">
+              {entryTeaser(entry.summary_html, 190)}
+            </p>
           )}
+
+          <span className="mt-2.5 inline-flex items-center gap-1 text-[12.5px] font-bold text-navy-500 transition group-hover:text-navy">
+            Read the full entry
+            <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+          </span>
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
