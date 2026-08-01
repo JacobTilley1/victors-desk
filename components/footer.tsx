@@ -43,6 +43,7 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2 text-sm">
               <li><Link href="/history" className="text-slate-400 transition hover:text-maize">History archive</Link></li>
+              <li><Link href="/games" className="text-slate-400 transition hover:text-maize">Games</Link></li>
               <li><Link href="/about" className="text-slate-400 transition hover:text-maize">About</Link></li>
               <li><Link href="/contact" className="text-slate-400 transition hover:text-maize">Contact</Link></li>
               <li><Link href="/forum" className="text-slate-400 transition hover:text-maize">Forum</Link></li>
