@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { getHistoryPage, seriesRecord, byDecade } from '@/lib/history';
+import { getHistoryPage, seriesRecord, byDecade, isRivalryPage } from '@/lib/history';
 import { getProfile, isAdmin } from '@/lib/auth';
 import { SITE, SITE_URL } from '@/lib/constants';
 import { ArrowLeft, PenLine, Star, CalendarDays } from 'lucide-react';
@@ -42,7 +42,7 @@ export default async function HistoryPageView({
   const profile = await getProfile();
   const admin = isAdmin(profile);
 
-  const isRivalry = page.kind === 'rivalry';
+  const isRivalry = isRivalryPage(page);
   const record = seriesRecord(entries);
   const decades = byDecade(entries);
   const years = entries.map((e) => e.year);

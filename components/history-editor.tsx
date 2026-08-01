@@ -9,6 +9,7 @@ import {
 import {
   Loader2, Plus, Save, Trash2, X, Star, CheckCircle2, AlertCircle, PenLine,
 } from 'lucide-react';
+import { isRivalryPage } from '@/lib/history-shared';
 import type { HistoryEntry, HistoryPage } from '@/lib/database.types';
 
 type Msg = { type: 'ok' | 'err'; text: string } | null;
@@ -54,7 +55,7 @@ export default function HistoryEditor({
   const router = useRouter();
 
   // A season and a single game need different fields. The page decides which.
-  const isRivalry = page.kind === 'rivalry';
+  const isRivalry = isRivalryPage(page);
 
   // ---- page details ----
   const [title, setTitle] = useState(page.title);

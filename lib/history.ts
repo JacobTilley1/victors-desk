@@ -1,6 +1,8 @@
 import { createPublicClient } from '@/lib/supabase/public';
 import type { HistoryEntry, HistoryPage } from '@/lib/database.types';
 
+export { isRivalryPage } from '@/lib/history-shared';
+
 /** All reference pages, for the hub. */
 export async function getHistoryPages(): Promise<HistoryPage[]> {
   const supabase = createPublicClient(300);
