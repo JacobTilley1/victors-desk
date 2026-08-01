@@ -62,6 +62,11 @@ export default function HistoryEditor({
   const [subtitle, setSubtitle] = useState(page.subtitle ?? '');
   const [kicker, setKicker] = useState(page.kicker ?? '');
   const [introHtml, setIntroHtml] = useState(page.intro_html);
+  const [allTimeWins, setAllTimeWins] = useState(page.all_time_wins?.toString() ?? '');
+  const [allTimeLosses, setAllTimeLosses] = useState(page.all_time_losses?.toString() ?? '');
+  const [allTimeTies, setAllTimeTies] = useState(page.all_time_ties?.toString() ?? '');
+  const [allTimeNote, setAllTimeNote] = useState(page.all_time_note ?? '');
+  const [spanLabel, setSpanLabel] = useState(page.span_label ?? '');
   const [pageMsg, setPageMsg] = useState<Msg>(null);
   const [savingPage, startPage] = useTransition();
 
@@ -100,6 +105,7 @@ export default function HistoryEditor({
     startPage(async () => {
       const res = await updateHistoryPage({
         id: page.id, slug: page.slug, title, subtitle, kicker, introHtml,
+        allTimeWins, allTimeLosses, allTimeTies, allTimeNote, spanLabel,
       });
       setPageMsg({ type: res.ok ? 'ok' : 'err', text: res.message ?? '' });
       if (res.ok) router.refresh();
@@ -146,6 +152,52 @@ export default function HistoryEditor({
 
         <label className="label mt-4">Subtitle</label>
         <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} className="input" />
+
+        <div className="mt-6 rounded-xl border border-[var(--line)] bg-slate-50/70 p-4">
+          <h3 className="font-display text-[15px] font-bold text-navy">
+            Headline figures
+          </h3>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500">
+            The real all-time numbers, entered by hand — not a count of what&rsquo;s been
+            logged here. Leave blank to hide them.
+          </p>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="label">All-time wins</label>
+              <input value={allTimeWins} onChange={(e) => setAllTimeWins(e.target.value)} className="input" />
+            </div>
+            <div>
+              <label className="label">All-time losses</label>
+              <input value={allTimeLosses} onChange={(e) => setAllTimeLosses(e.target.value)} className="input" />
+            </div>
+            <div>
+              <label className="label">All-time ties</label>
+              <input value={allTimeTies} onChange={(e) => setAllTimeTies(e.target.value)} className="input" />
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="label">Span</label>
+              <input
+                value={spanLabel}
+                onChange={(e) => setSpanLabel(e.target.value)}
+                placeholder="1897–2025"
+                className="input"
+              />
+            </div>
+            <div>
+              <label className="label">Caption</label>
+              <input
+                value={allTimeNote}
+                onChange={(e) => setAllTimeNote(e.target.value)}
+                placeholder="Series record through 2025"
+                className="input"
+              />
+            </div>
+          </div>
+        </div>
 
         <label className="label mt-5">Introduction</label>
         <p className="mb-2 text-[12.5px] text-slate-400">

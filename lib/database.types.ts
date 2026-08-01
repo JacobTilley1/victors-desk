@@ -114,6 +114,11 @@ export interface HistoryPage {
   intro_html: string;
   hero_image_url: string | null;
   kicker: string | null;
+  all_time_wins: number | null;
+  all_time_losses: number | null;
+  all_time_ties: number | null;
+  all_time_note: string | null;
+  span_label: string | null;
   sort_order: number;
   updated_at: string;
 }

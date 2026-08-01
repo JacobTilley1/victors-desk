@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { getHistoryPage, seriesRecord, byDecade, isRivalryPage, entryTeaser } from '@/lib/history';
+import { getHistoryPage, byDecade, isRivalryPage, entryTeaser } from '@/lib/history';
 import { getProfile, isAdmin } from '@/lib/auth';
 import { SITE, SITE_URL } from '@/lib/constants';
 import { ArrowLeft, ArrowRight, PenLine, Star, CalendarDays } from 'lucide-react';
@@ -13,14 +13,15 @@ export async function generateMetadata({
   const data = await getHistoryPage(params.slug);
   if (!data) return { title: 'Not found' };
 
-  const { page, entries } = data;
-  const span = entries.length
-    ? ` Covering ${Math.min(...entries.map((e) => e.year))}–${Math.max(...entries.map((e) => e.year))}.`
-    : '';
+  const { page } = data;
 
   return {
     title: page.title,
-    description: `${page.subtitle ?? ''}${span}`.trim() || page.title,
+    description:
+      [page.subtitle, page.span_label && `Covering ${page.span_label}.`]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || page.title,
     alternates: { canonical: `/history/${page.slug}` },
     openGraph: {
       title: page.title,
@@ -43,10 +44,9 @@ export default async function HistoryPageView({
   const admin = isAdmin(profile);
 
   const isRivalry = isRivalryPage(page);
-  const record = seriesRecord(entries);
   const decades = byDecade(entries);
-  const years = entries.map((e) => e.year);
-  const span = years.length ? { first: Math.min(...years), last: Math.max(...years) } : null;
+  const hasFigures =
+    page.all_time_wins !== null && page.all_time_losses !== null;
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -106,34 +106,47 @@ export default async function HistoryPageView({
             </p>
           )}
 
-          {/* series record / span */}
-          <div className="mt-8 flex flex-wrap items-end gap-8 border-t border-white/15 pt-6">
-            {isRivalry ? (
-              <>
-                <Figure value={record.wins} label="Wins" accent />
-                <Figure value={record.losses} label="Losses" />
-                {record.ties > 0 && <Figure value={record.ties} label="Ties" />}
-                <Figure value={entries.length} label="Meetings" />
-              </>
-            ) : (
-              <Figure value={entries.length} label={entries.length === 1 ? 'Season' : 'Seasons'} accent />
-            )}
-            {span && (
-              <div>
-                <p className="font-display text-[28px] font-bold leading-none text-white">
-                  {span.first}&ndash;{span.last}
-                </p>
-                <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  Covered
-                </p>
+          {/*
+            Real all-time figures, entered by hand. Deliberately NOT derived
+            from the entries on the page — a count of what's been logged reads
+            as a series record and would be wrong.
+          */}
+          {(hasFigures || page.span_label || admin) && (
+            <div className="mt-8 border-t border-white/15 pt-6">
+              <div className="flex flex-wrap items-end gap-8">
+                {hasFigures && (
+                  <>
+                    <Figure value={page.all_time_wins ?? 0} label="Wins" accent />
+                    <Figure value={page.all_time_losses ?? 0} label="Losses" />
+                    {(page.all_time_ties ?? 0) > 0 && (
+                      <Figure value={page.all_time_ties ?? 0} label="Ties" />
+                    )}
+                  </>
+                )}
+
+                {page.span_label && (
+                  <div>
+                    <p className="font-display text-[28px] font-bold leading-none text-white">
+                      {page.span_label}
+                    </p>
+                    <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      {isRivalry ? 'Series span' : 'Seasons played'}
+                    </p>
+                  </div>
+                )}
+
+                {admin && (
+                  <Link href={`/history/${page.slug}/edit`} className="btn-primary btn-sm ml-auto">
+                    <PenLine size={14} /> Edit page
+                  </Link>
+                )}
               </div>
-            )}
-            {admin && (
-              <Link href={`/history/${page.slug}/edit`} className="btn-primary btn-sm ml-auto">
-                <PenLine size={14} /> Edit page
-              </Link>
-            )}
-          </div>
+
+              {page.all_time_note && (
+                <p className="mt-4 text-[12.5px] text-slate-400">{page.all_time_note}</p>
+              )}
+            </div>
+          )}
         </div>
         <div className="absolute bottom-0 h-1.5 w-full bg-maize" />
       </section>

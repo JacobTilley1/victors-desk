@@ -16,6 +16,11 @@ export async function updateHistoryPage(input: {
   subtitle: string;
   kicker: string;
   introHtml: string;
+  allTimeWins: string;
+  allTimeLosses: string;
+  allTimeTies: string;
+  allTimeNote: string;
+  spanLabel: string;
 }) {
   if (!(await requireAdmin())) return { ok: false, message: 'Admins only.' };
   if (input.title.trim().length < 3) return { ok: false, message: 'Give the page a title.' };
@@ -28,6 +33,11 @@ export async function updateHistoryPage(input: {
       subtitle: input.subtitle.trim() || null,
       kicker: input.kicker.trim() || null,
       intro_html: input.introHtml,
+      all_time_wins: input.allTimeWins.trim() === '' ? null : Number(input.allTimeWins),
+      all_time_losses: input.allTimeLosses.trim() === '' ? null : Number(input.allTimeLosses),
+      all_time_ties: input.allTimeTies.trim() === '' ? null : Number(input.allTimeTies),
+      all_time_note: input.allTimeNote.trim() || null,
+      span_label: input.spanLabel.trim() || null,
     })
     .eq('id', input.id);
 
