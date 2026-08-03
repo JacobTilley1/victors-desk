@@ -35,14 +35,32 @@ function draftKey(id?: string) {
   return `vd:draft:${id ?? 'new'}`;
 }
 
-function readLocalDraft(id?: string): LocalDraft | null {
-  if (typeof window === 'undefined') return null;
+function readOne(key: string): LocalDraft | null {
   try {
-    const raw = window.localStorage.getItem(draftKey(id));
+    const raw = window.localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as LocalDraft) : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Read the best local draft available, checking BOTH the id-keyed copy and the
+ * "new" copy and taking whichever was saved most recently.
+ *
+ * Checking both matters. A brand-new post starts life under the "new" key; the
+ * first autosave assigns it an id and later saves go under "vd:draft:<id>".
+ * But the address bar is updated with history.replaceState, which Next's
+ * router doesn't know about — so if the composer ever remounts, it can come
+ * back up believing it's still a new post with no id, look only under "new",
+ * and find nothing. That produced a blank editor holding a full article.
+ */
+function readLocalDraft(id?: string): LocalDraft | null {
+  if (typeof window === 'undefined') return null;
+  const candidates = [readOne(draftKey(id)), readOne(draftKey(undefined))]
+    .filter((d): d is LocalDraft => !!d && typeof d.savedAt === 'number');
+  if (!candidates.length) return null;
+  return candidates.sort((a, b) => b.savedAt - a.savedAt)[0];
 }
 
 export default function PostComposer({
@@ -174,9 +192,13 @@ export default function PostComposer({
         title, team, excerpt, cover, html, publishAt, savedAt: Date.now(),
       };
       window.localStorage.setItem(draftKey(postId), JSON.stringify(payload));
-      // A brand-new post also writes under the "new" key until it has an id,
-      // so nothing is stranded if the first save hasn't happened yet.
-      if (postId) window.localStorage.removeItem(draftKey(undefined));
+      /*
+       * Mirror to the "new" key as well, and never delete it mid-session.
+       * Deleting it once an id arrived is what stranded work: a remount that
+       * didn't know about the id looked under "new", found it gone, and
+       * started the editor empty. Both keys are cleared on publish.
+       */
+      if (postId) window.localStorage.setItem(draftKey(undefined), JSON.stringify(payload));
     } catch {
       // Storage full or blocked — the server autosave still covers us.
     }
@@ -201,6 +223,9 @@ export default function PostComposer({
         contentJson: json ? JSON.stringify(json) : null,
         publishAt: publishAt ? new Date(publishAt).toISOString() : null,
         intent: 'draft',
+        // Never revalidate from the timer — that refreshes the page being
+        // typed on and can remount the editor out from under the writer.
+        silent: true,
       });
       if (res.ok) {
         dirty.current = false;

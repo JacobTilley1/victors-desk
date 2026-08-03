@@ -20,6 +20,20 @@ interface PostInput {
   /** ISO timestamp. A future value schedules the post instead of publishing now. */
   publishAt?: string | null;
   intent: 'draft' | 'submit';
+  /**
+   * True when this came from the 5-second autosave timer rather than a click.
+   *
+   * Autosaves must NOT revalidate. revalidatePath inside a Server Action makes
+   * the Next.js router refresh the route the writer is currently on, which
+   * re-renders /write from the server and can remount the composer. When that
+   * happens the editor re-initialises from the last *saved* content and every
+   * word typed since vanishes. Firing that every five seconds is why work kept
+   * disappearing mid-article.
+   *
+   * Nothing public changes when a draft is saved anyway, so there is nothing
+   * to revalidate.
+   */
+  silent?: boolean;
 }
 
 /**
@@ -129,10 +143,12 @@ export async function savePost(input: PostInput): Promise<ActionResult> {
       .eq('id', input.id);
     if (error) return { ok: false, message: error.message };
 
-    revalidatePath('/dashboard');
-    revalidatePath(`/blog/${existing.slug}`);
-    revalidatePath('/blog');
-    revalidatePath('/');
+    if (!input.silent) {
+      revalidatePath('/dashboard');
+      revalidatePath(`/blog/${existing.slug}`);
+      revalidatePath('/blog');
+      revalidatePath('/');
+    }
     return { ok: true, id: input.id, slug: existing.slug, message: label(status, scheduledFor) };
   }
 
@@ -145,9 +161,11 @@ export async function savePost(input: PostInput): Promise<ActionResult> {
 
   if (error) return { ok: false, message: error.message };
 
-  revalidatePath('/dashboard');
-  revalidatePath('/blog');
-  revalidatePath('/');
+  if (!input.silent) {
+    revalidatePath('/dashboard');
+    revalidatePath('/blog');
+    revalidatePath('/');
+  }
   return { ok: true, id: data!.id, slug: data!.slug, message: label(status, scheduledFor) };
 }
 
