@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import GoogleAnalytics from '@/components/google-analytics';
+import Grow from '@/components/grow';
 import { Inter, Bitter } from 'next/font/google';
 import './globals.css';
 import Nav from '@/components/nav';
@@ -93,6 +94,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Footer />
         <Analytics />
         <GoogleAnalytics />
+        <Grow />
       </body>
     </html>
   );
