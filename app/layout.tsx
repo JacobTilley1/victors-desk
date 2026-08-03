@@ -84,6 +84,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" className={`${inter.variable} ${bitter.variable}`}>
+      {/*
+        Grow must load early and must appear in the server-rendered HTML —
+        Mediavine's install checker reads the markup, not the live DOM. Keep it
+        at the top of the tree.
+      */}
+      <Grow />
       <body className="flex min-h-screen flex-col font-sans">
         <script
           type="application/ld+json"
@@ -94,7 +100,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Footer />
         <Analytics />
         <GoogleAnalytics />
-        <Grow />
       </body>
     </html>
   );

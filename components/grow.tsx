@@ -1,5 +1,3 @@
-'use client';
-
 import Script from 'next/script';
 
 /**
@@ -11,11 +9,20 @@ import Script from 'next/script';
  * Both clocks run at the same time, so the script goes up as early as
  * possible — long before the site is anywhere near the session threshold.
  *
- * Loaded through next/script for the same reason GA4 is: a raw <script> in the
- * React tree lands in the HTML but doesn't reliably execute after streaming and
- * hydration. That's what produced the "tag is in view-source but the global is
- * undefined" problem with GA4, and it would produce the same failure here —
- * except Grow's dashboard would just quietly report the script as missing.
+ * IMPORTANT — this is a server component and the strategy is "beforeInteractive"
+ * on purpose. Do not add 'use client' and do not downgrade it to
+ * "afterInteractive".
+ *
+ * afterInteractive injects the tag from the browser after hydration, which
+ * means it never appears in the server-rendered HTML. That breaks two things:
+ * you can't confirm it with view-source, and — the real problem — Grow's
+ * install checker fetches the page server-side and looks for the tag in the
+ * markup. Client-injected, their checker reports the script as missing and the
+ * 30-day clock never starts.
+ *
+ * beforeInteractive emits the tag into the initial HTML, which is also what
+ * Grow's own instructions ask for ("place it in the <head> section"). It only
+ * works from the root layout, which is where this is rendered.
  */
 
 // Site ID from the Grow publisher portal. Not a secret — it ships in the HTML
@@ -26,20 +33,13 @@ import Script from 'next/script';
 const GROW_SITE_ID =
   'U2l0ZTphOWYwYmMxNS02Nzc5LTRmYTAtYjcyMS1lYmQxMjAyZjk1NjY=';
 
-export default function Grow() {
-  // Live site only, so local development stays out of Grow's numbers.
-  if (process.env.NODE_ENV !== 'production') return null;
-
-  /*
-   * The body below is Grow's own snippet, unmodified apart from whitespace.
-   * Note the `window.growMe ||` guard on the first line — it makes the
-   * initializer idempotent, so a double render (React strict mode, a fast
-   * client-side navigation) can't clobber a queue that's already collecting
-   * calls. That guard is theirs and it's deliberate; don't simplify it away.
-   */
-  return (
-    <Script id="grow-init" strategy="afterInteractive" data-grow-initializer="">
-      {`
+/*
+ * Grow's own snippet, unmodified apart from whitespace. The `window.growMe ||`
+ * guard on the first line makes the initializer idempotent so a re-render can't
+ * clobber a queue that's already collecting calls. That guard is theirs and
+ * it's deliberate — don't simplify it away.
+ */
+const GROW_SNIPPET = `
 !(function(){
   window.growMe || ((window.growMe = function(e){ window.growMe._.push(e); }), (window.growMe._ = []));
   var e = document.createElement("script");
@@ -50,7 +50,15 @@ export default function Grow() {
   var t = document.getElementsByTagName("script")[0];
   t.parentNode.insertBefore(e, t);
 })();
-      `.trim()}
-    </Script>
+`.trim();
+
+export default function Grow() {
+  return (
+    <Script
+      id="grow-init"
+      strategy="beforeInteractive"
+      data-grow-initializer=""
+      dangerouslySetInnerHTML={{ __html: GROW_SNIPPET }}
+    />
   );
 }
