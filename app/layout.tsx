@@ -85,11 +85,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" className={`${inter.variable} ${bitter.variable}`}>
       {/*
-        Grow must load early and must appear in the server-rendered HTML —
-        Mediavine's install checker reads the markup, not the live DOM. Keep it
-        at the top of the tree.
+        An explicit <head> so the Grow script provably lands there. Next still
+        injects everything from the metadata export into this element — the tag
+        doesn't replace generated head content, it adds to it.
+
+        Grow's install checker reads the server-rendered markup and their
+        instructions say the <head> specifically. next/script put it in the
+        <body>, which is why their bot kept reporting it missing even though
+        the tag was on the page and window.growMe was defined.
       */}
-      <Grow />
+      <head>
+        <Grow />
+      </head>
       <body className="flex min-h-screen flex-col font-sans">
         <script
           type="application/ld+json"
