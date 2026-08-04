@@ -119,6 +119,35 @@ body {
 .prose-mich pre code { @apply bg-transparent p-0 text-inherit; }
 .prose-mich hr { @apply my-8 border-[var(--line)]; }
 
+/* ---- tables ----
+   Wrapped in an overflow container so a wide stat table scrolls sideways on a
+   phone instead of blowing out the article width. */
+.prose-mich table {
+  @apply my-7 w-full table-fixed border-collapse overflow-hidden rounded-xl text-[15px];
+}
+.prose-mich th {
+  @apply border border-navy-600 bg-navy px-3 py-2.5 text-left font-display font-bold text-white;
+}
+.prose-mich td {
+  @apply border border-[var(--line)] px-3 py-2.5 align-top;
+}
+.prose-mich tbody tr:nth-child(even) td { @apply bg-slate-50/70; }
+.prose-mich .tableWrapper { @apply my-7 overflow-x-auto; }
+.prose-mich .tableWrapper table { @apply my-0 min-w-[560px]; }
+
+/* Editing affordances — only inside the composer. */
+.ProseMirror table { @apply relative; }
+.ProseMirror td, .ProseMirror th { @apply relative; }
+.ProseMirror .selectedCell::after {
+  content: '';
+  @apply pointer-events-none absolute inset-0 bg-maize/25;
+}
+.ProseMirror .column-resize-handle {
+  @apply absolute -right-0.5 top-0 z-20 w-1 cursor-col-resize bg-maize;
+  bottom: -2px;
+}
+.ProseMirror.resize-cursor { cursor: col-resize; }
+
 .ProseMirror { @apply min-h-[420px] outline-none; }
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);

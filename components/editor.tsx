@@ -6,10 +6,15 @@ import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
 import {
   Bold, Italic, Strikethrough, Heading2, Heading3, List, ListOrdered,
   Quote, Code2, Minus, Link2, Link2Off, ImagePlus, Undo2, Redo2,
-  Search, Text as TextIcon,
+  Search, Text as TextIcon, Table as TableIcon,
+  Rows3, Columns3, Trash2,
 } from 'lucide-react';
 import ImagePicker, { type PickedPhoto } from '@/components/image-picker';
 
@@ -50,6 +55,17 @@ export default function RichEditor({
       Placeholder.configure({
         placeholder: 'Start with the lede. What happened, and why does it matter to Michigan?',
       }),
+      /*
+       * resizable puts ProseMirror's own column-resize plugin in play, which is
+       * what makes a stat table usable — narrow columns for numbers, wide ones
+       * for names. Tiptap wraps every table in .tableWrapper, and globals.css
+       * makes that wrapper scroll horizontally so a wide table doesn't break
+       * the article layout on a phone.
+       */
+      Table.configure({ resizable: true, HTMLAttributes: { class: 'stat-table' } }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: initialHtml,
     editorProps: {
@@ -157,6 +173,32 @@ export default function RichEditor({
           <Btn ed={editor} cmd={editAlt} label="Edit alt text"><TextIcon size={16} /></Btn>
         )}
         <Btn ed={editor} cmd={() => editor.chain().focus().setHorizontalRule().run()} label="Divider"><Minus size={16} /></Btn>
+        <Sep />
+        <Btn
+          ed={editor}
+          cmd={() =>
+            editor.chain().focus()
+              .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+              .run()
+          }
+          label="Insert table"
+        >
+          <TableIcon size={16} />
+        </Btn>
+        {/*
+          Row and column controls only appear when the cursor is inside a
+          table. Showing four dead buttons the rest of the time makes the
+          toolbar look broken.
+        */}
+        {editor.isActive('table') && (
+          <>
+            <Btn ed={editor} cmd={() => editor.chain().focus().addRowAfter().run()} label="Add row"><Rows3 size={16} /></Btn>
+            <Btn ed={editor} cmd={() => editor.chain().focus().addColumnAfter().run()} label="Add column"><Columns3 size={16} /></Btn>
+            <Btn ed={editor} cmd={() => editor.chain().focus().deleteRow().run()} label="Delete row"><Rows3 size={16} className="opacity-50" /></Btn>
+            <Btn ed={editor} cmd={() => editor.chain().focus().deleteColumn().run()} label="Delete column"><Columns3 size={16} className="opacity-50" /></Btn>
+            <Btn ed={editor} cmd={() => editor.chain().focus().deleteTable().run()} label="Delete table"><Trash2 size={16} /></Btn>
+          </>
+        )}
         <Sep />
         <Btn ed={editor} cmd={() => editor.chain().focus().undo().run()} label="Undo"><Undo2 size={16} /></Btn>
         <Btn ed={editor} cmd={() => editor.chain().focus().redo().run()} label="Redo"><Redo2 size={16} /></Btn>
