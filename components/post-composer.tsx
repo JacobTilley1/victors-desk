@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import RichEditor from '@/components/editor';
+import SeoPanel from '@/components/seo-panel';
 import TeamBadge from '@/components/team-badge';
 import { savePost } from '@/app/actions/posts';
 import { createClient } from '@/lib/supabase/client';
@@ -28,6 +29,8 @@ interface LocalDraft {
   cover: string;
   html: string;
   publishAt: string;
+  /** Editor-only. Never sent to the server; it's a writing aid, not content. */
+  keyphrase?: string;
   savedAt: number;
 }
 
@@ -93,6 +96,7 @@ export default function PostComposer({
     const local = new Date(at.getTime() - at.getTimezoneOffset() * 60000);
     return local.toISOString().slice(0, 16);
   });
+  const [keyphrase, setKeyphrase] = useState(restore?.keyphrase ?? '');
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
@@ -189,7 +193,7 @@ export default function PostComposer({
     dirty.current = true;
     try {
       const payload: LocalDraft = {
-        title, team, excerpt, cover, html, publishAt, savedAt: Date.now(),
+        title, team, excerpt, cover, html, publishAt, keyphrase, savedAt: Date.now(),
       };
       window.localStorage.setItem(draftKey(postId), JSON.stringify(payload));
       /*
@@ -202,7 +206,7 @@ export default function PostComposer({
     } catch {
       // Storage full or blocked — the server autosave still covers us.
     }
-  }, [title, team, excerpt, cover, html, publishAt, postId]);
+  }, [title, team, excerpt, cover, html, publishAt, keyphrase, postId]);
 
   const autosave = useCallback(async () => {
     if (!autosaveAllowed || inFlight.current || !dirty.current) return;
@@ -359,6 +363,15 @@ export default function PostComposer({
             <span>{msg.text}</span>
           </div>
         )}
+
+        <SeoPanel
+          title={title}
+          excerpt={excerpt}
+          html={html}
+          cover={cover}
+          keyphrase={keyphrase}
+          onKeyphrase={setKeyphrase}
+        />
 
         <div className="card p-5">
           <h3 className="mb-4 font-display text-[15px] font-bold text-navy">Post settings</h3>
