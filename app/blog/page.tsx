@@ -5,6 +5,20 @@ import { getPublishedPosts, getCommentCounts } from '@/lib/queries';
 import { TEAMS } from '@/lib/constants';
 import { Newspaper, Search } from 'lucide-react';
 
+/*
+ * Regenerate at most once a minute.
+ *
+ * Without this, Next prerenders /blog once at build time and serves that HTML
+ * forever for the bare URL. Requests carrying a query string (/blog?team=…)
+ * render dynamically and looked fine, which is what hid the problem — the
+ * clean /blog that Google actually crawls was a frozen copy from an old
+ * build, showing "Nothing here yet" and a canonical pointing at the homepage.
+ *
+ * Every public page that reads from the database needs this. Deploys alone
+ * are not a reliable way to refresh a prerendered route.
+ */
+export const revalidate = 60;
+
 export const metadata = {
   title: 'All stories',
   description:

@@ -1,4 +1,7 @@
 import Link from 'next/link';
+
+/* Regenerate at most once a minute — see the note in app/blog/page.tsx. */
+export const revalidate = 60;
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';

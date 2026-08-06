@@ -1,4 +1,7 @@
 import Link from 'next/link';
+
+/* Regenerate at most once a minute — see the note in app/blog/page.tsx. */
+export const revalidate = 60;
 import { getHistoryPages } from '@/lib/history';
 import { SITE, SITE_URL } from '@/lib/constants';
 import { ArrowRight, BookOpen, Swords, Trophy } from 'lucide-react';

@@ -1,4 +1,7 @@
 import Link from 'next/link';
+
+/* Regenerate at most once a minute — see the note in app/blog/page.tsx. */
+export const revalidate = 60;
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import Avatar from '@/components/avatar';

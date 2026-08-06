@@ -1,4 +1,7 @@
 import Link from 'next/link';
+
+/* Forum moves faster than the rest of the site, so a shorter window. */
+export const revalidate = 30;
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getProfile, isAdmin } from '@/lib/auth';
