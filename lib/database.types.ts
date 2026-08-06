@@ -3,7 +3,7 @@ export type AuthorStatus = 'none' | 'pending' | 'approved' | 'rejected';
 export type PostStatus = 'draft' | 'pending' | 'published' | 'rejected';
 export type Team =
   | 'football' | 'basketball' | 'hockey' | 'baseball'
-  | 'olympic' | 'recruiting' | 'bigten' | 'opinion';
+  | 'olympic' | 'recruiting' | 'bigten' | 'problue' | 'opinion';
 
 export interface Profile {
   id: string;
@@ -102,6 +102,33 @@ export type ThreadWithMeta = ForumThread & {
 export type ReplyWithAuthor = ForumReply & {
   author: Pick<Profile, 'id' | 'display_name' | 'avatar_url' | 'role'> | null;
 };
+
+export type League = 'nfl' | 'nba';
+export type ProStatus = 'active' | 'retired';
+
+export interface ProPlayer {
+  id: string;
+  slug: string;
+  name: string;
+  league: League;
+  position: string | null;
+  pro_team: string | null;
+  jersey_number: string | null;
+  status: ProStatus;
+  michigan_years: string | null;
+  michigan_note: string | null;
+  draft_year: number | null;
+  draft_round: number | null;
+  draft_pick: number | null;
+  drafted_by: string | null;
+  accolades: string | null;
+  headshot_url: string | null;
+  bio_html: string;
+  is_highlight: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
 
 export type HistoryKind = 'season' | 'rivalry';
 

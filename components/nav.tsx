@@ -14,6 +14,7 @@ const LINKS = [
   { href: '/blog', label: 'Blog' },
   { href: '/forum', label: 'Forum' },
   { href: '/history', label: 'History' },
+  { href: '/pro', label: 'Pro Blue' },
   { href: '/games', label: 'Games' },
   { href: '/authors', label: 'Writers' },
 ];

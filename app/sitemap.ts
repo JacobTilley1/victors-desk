@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { createPublicClient } from '@/lib/supabase/public';
 import { SITE_URL } from '@/lib/constants';
 import { getAllHistoryEntryPaths } from '@/lib/history';
+import { getAllProPlayerPaths } from '@/lib/pro';
 
 // Rebuild the sitemap at most once an hour.
 export const revalidate = 3600;
@@ -9,7 +10,7 @@ export const revalidate = 3600;
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createPublicClient();
 
-  const [posts, categories, threads, authors, historyEntries] = await Promise.all([
+  const [posts, categories, threads, authors, historyEntries, proPlayers] = await Promise.all([
     supabase
       .from('posts')
       .select('slug, updated_at, published_at')
@@ -30,6 +31,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .in('role', ['author', 'admin'])
       .eq('is_banned', false),
     getAllHistoryEntryPaths(),
+    getAllProPlayerPaths(),
   ]);
 
   const now = new Date();
@@ -43,6 +45,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/history/seasons`,        lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
     { url: `${SITE_URL}/history/the-game`,       lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
     { url: `${SITE_URL}/history/michigan-state`, lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
+    { url: `${SITE_URL}/pro`,        lastModified: now, changeFrequency: 'weekly',  priority: 0.8 },
     { url: `${SITE_URL}/games`,      lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${SITE_URL}/games/hardwood-dynasty`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
     { url: `${SITE_URL}/about`,      lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
@@ -95,6 +98,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })
   );
 
+  const proRoutes: MetadataRoute.Sitemap = proPlayers.map((p) => ({
+    url: `${SITE_URL}/pro/${p.slug}`,
+    lastModified: new Date(p.updated_at ?? now),
+    changeFrequency: 'weekly' as const,
+    priority: 0.7,
+  }));
+
   const historyRoutes: MetadataRoute.Sitemap = historyEntries.map((h) => ({
     url: `${SITE_URL}/history/${h.slug}/${h.year}`,
     lastModified: new Date(h.updatedAt ?? now),
@@ -105,6 +115,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     ...staticRoutes,
     ...historyRoutes,
+    ...proRoutes,
     ...postRoutes,
     ...categoryRoutes,
     ...threadRoutes,
