@@ -139,6 +139,53 @@ export default async function ProHub({
           </div>
         )}
       </section>
+
+      {/* Section front: the writing that goes with the profiles. */}
+      {articles.length > 0 && (
+        <section className="border-t border-[var(--line)] bg-slate-50/60">
+          <div className="container-page py-12">
+            <div className="flex flex-wrap items-center gap-4">
+              <h2 className="font-display text-[24px] font-bold text-navy">
+                Latest from Pro Blue
+              </h2>
+              <span className="h-px flex-1 bg-[var(--line)]" />
+              <Link
+                href="/blog?team=problue"
+                className="text-[13px] font-bold text-navy-500 hover:underline"
+              >
+                All Pro Blue stories
+              </Link>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {articles.map((a) => (
+                <Link
+                  key={a.slug}
+                  href={`/blog/${a.slug}`}
+                  className="group card block p-5 transition hover:-translate-y-0.5 hover:border-maize"
+                >
+                  <h3 className="font-display text-[17px] font-bold leading-snug text-navy transition group-hover:text-navy-500">
+                    {a.title}
+                  </h3>
+                  {a.excerpt && (
+                    <p className="mt-1.5 line-clamp-2 text-[14px] leading-relaxed text-slate-600">
+                      {a.excerpt}
+                    </p>
+                  )}
+                  <p className="mt-2.5 text-[12px] text-slate-400">
+                    {a.published_at
+                      ? new Date(a.published_at).toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric', year: 'numeric',
+                        })
+                      : null}
+                    {' · '}{a.read_minutes} min read
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
     </>
   );
 }
