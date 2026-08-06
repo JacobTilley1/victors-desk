@@ -90,6 +90,31 @@ export async function saveProPlayer(input: PlayerInput): Promise<Result> {
   return { ok: true, slug, message: input.id ? 'Player updated.' : 'Player added.' };
 }
 
+/** The hand-entered league totals shown in the hub header. */
+export async function updateProSettings(input: {
+  nflActive?: string;
+  nbaActive?: string;
+  figuresNote?: string;
+}): Promise<Result> {
+  const profile = await getProfile();
+  if (!isAdmin(profile)) return { ok: false, message: 'Admins only.' };
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('pro_settings')
+    .update({
+      nfl_active: num(input.nflActive),
+      nba_active: num(input.nbaActive),
+      figures_note: input.figuresNote?.trim() || null,
+    })
+    .eq('id', true);
+
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath('/pro');
+  return { ok: true, message: 'Figures updated.' };
+}
+
 export async function deleteProPlayer(id: string): Promise<Result> {
   const profile = await getProfile();
   if (!isAdmin(profile)) return { ok: false, message: 'Admins only.' };

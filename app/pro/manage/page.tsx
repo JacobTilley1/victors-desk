@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import ProEditor from '@/components/pro-editor';
-import { getProPlayers } from '@/lib/pro';
+import { getProPlayers, getProSettings } from '@/lib/pro';
 import { getProfile, isAdmin } from '@/lib/auth';
 import { ArrowLeft } from 'lucide-react';
 
@@ -14,7 +14,7 @@ export default async function ManageProPage() {
   const profile = await getProfile();
   if (!isAdmin(profile)) redirect('/pro');
 
-  const players = await getProPlayers();
+  const [players, settings] = await Promise.all([getProPlayers(), getProSettings()]);
 
   return (
     <div className="container-page max-w-4xl py-10">
@@ -27,7 +27,7 @@ export default async function ManageProPage() {
       </p>
 
       <div className="mt-8">
-        <ProEditor players={players} />
+        <ProEditor players={players} settings={settings} />
       </div>
     </div>
   );

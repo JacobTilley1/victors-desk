@@ -4,7 +4,9 @@ import Link from 'next/link';
 export const revalidate = 60;
 
 import type { Metadata } from 'next';
-import { getProPlayers, getProArticles, byTeam, LEAGUES, leagueLabel, draftLine } from '@/lib/pro';
+import {
+  getProPlayers, getProArticles, getProSettings, byTeam, LEAGUES, leagueLabel, draftLine,
+} from '@/lib/pro';
 import { getProfile, isAdmin } from '@/lib/auth';
 import { SITE, SITE_URL } from '@/lib/constants';
 import { PenLine, Star, ArrowRight } from 'lucide-react';
@@ -29,17 +31,26 @@ export default async function ProHub({
   const active = (LEAGUES.find((l) => l.value === searchParams.league)?.value ??
     null) as League | null;
 
-  const [players, articles, profile] = await Promise.all([
+  const [players, articles, settings, profile] = await Promise.all([
     getProPlayers(active ?? undefined),
     getProArticles(4),
+    getProSettings(),
     getProfile(),
   ]);
   const admin = isAdmin(profile);
 
-  const counts = {
-    nfl: players.filter((p) => p.league === 'nfl').length,
-    nba: players.filter((p) => p.league === 'nba').length,
-  };
+  /*
+   * Two different numbers, deliberately not conflated.
+   *
+   * The header shows the real count of Wolverines on NFL and NBA rosters,
+   * typed in by hand. How many profiles exist on the site is a separate,
+   * smaller number and is labelled as such — writing "24 in the NFL" when
+   * that's just how many pages have been built would be stating something
+   * false, which is the mistake the history pages made before migration 008.
+   */
+  const hasFigures =
+    settings?.nfl_active !== null && settings?.nfl_active !== undefined;
+  const profileCount = players.length;
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -79,15 +90,30 @@ export default async function ProHub({
             Wolverine on an NFL or NBA roster, what they did here, and how they got there.
           </p>
 
-          <div className="mt-8 flex flex-wrap items-end gap-8 border-t border-white/15 pt-6">
-            <Figure value={counts.nfl} label="In the NFL" accent />
-            <Figure value={counts.nba} label="In the NBA" />
-            {admin && (
-              <Link href="/pro/manage" className="btn-primary btn-sm ml-auto">
-                <PenLine size={14} /> Manage players
-              </Link>
-            )}
-          </div>
+          {(hasFigures || admin) && (
+            <div className="mt-8 border-t border-white/15 pt-6">
+              <div className="flex flex-wrap items-end gap-8">
+                {hasFigures && (
+                  <>
+                    <Figure value={settings?.nfl_active ?? 0} label="In the NFL" accent />
+                    <Figure value={settings?.nba_active ?? 0} label="In the NBA" />
+                  </>
+                )}
+                {profileCount > 0 && (
+                  <Figure value={profileCount} label="Profiles here" muted />
+                )}
+                {admin && (
+                  <Link href="/pro/manage" className="btn-primary btn-sm ml-auto">
+                    <PenLine size={14} /> Manage
+                  </Link>
+                )}
+              </div>
+
+              {settings?.figures_note && (
+                <p className="mt-4 text-[12.5px] text-slate-400">{settings.figures_note}</p>
+              )}
+            </div>
+          )}
         </div>
         <div className="absolute bottom-0 h-1.5 w-full bg-maize" />
       </section>
@@ -190,10 +216,16 @@ export default async function ProHub({
   );
 }
 
-function Figure({ value, label, accent }: { value: number; label: string; accent?: boolean }) {
+function Figure({
+  value, label, accent, muted,
+}: { value: number; label: string; accent?: boolean; muted?: boolean }) {
   return (
     <div>
-      <p className={`font-display text-[34px] font-bold leading-none ${accent ? 'text-maize' : 'text-white'}`}>
+      <p
+        className={`font-display font-bold leading-none ${
+          muted ? 'text-[24px] text-slate-400' : 'text-[34px]'
+        } ${accent ? 'text-maize' : muted ? '' : 'text-white'}`}
+      >
         {value}
       </p>
       <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">

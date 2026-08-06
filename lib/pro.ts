@@ -1,5 +1,19 @@
 import { createPublicClient } from '@/lib/supabase/public';
-import type { League, ProPlayer } from '@/lib/database.types';
+import type { League, ProPlayer, ProSettings } from '@/lib/database.types';
+
+/**
+ * Hand-entered league totals.
+ *
+ * These are the real numbers of Wolverines on NFL and NBA rosters, kept
+ * separate from how many profiles exist on the site. The site will always be
+ * behind reality, and showing a profile count next to the words "in the NFL"
+ * would state something false. Blank hides the figure entirely.
+ */
+export async function getProSettings(): Promise<ProSettings | null> {
+  const supabase = createPublicClient(300);
+  const { data } = await supabase.from('pro_settings').select('*').maybeSingle();
+  return (data as ProSettings) ?? null;
+}
 
 export const LEAGUES: { value: League; label: string; short: string }[] = [
   { value: 'nfl', label: 'National Football League', short: 'NFL' },

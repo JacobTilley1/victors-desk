@@ -130,6 +130,14 @@ export interface ProPlayer {
   updated_at: string;
 }
 
+export interface ProSettings {
+  id: boolean;
+  nfl_active: number | null;
+  nba_active: number | null;
+  figures_note: string | null;
+  updated_at: string;
+}
+
 export type HistoryKind = 'season' | 'rivalry';
 
 export interface HistoryPage {

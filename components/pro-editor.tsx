@@ -3,12 +3,12 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import RichEditor from '@/components/editor';
-import { saveProPlayer, deleteProPlayer } from '@/app/actions/pro';
+import { saveProPlayer, deleteProPlayer, updateProSettings } from '@/app/actions/pro';
 import { LEAGUES, leagueLabel } from '@/lib/pro';
 import {
   Loader2, Plus, Save, Trash2, X, Star, CheckCircle2, AlertCircle, PenLine,
 } from 'lucide-react';
-import type { League, ProPlayer, ProStatus } from '@/lib/database.types';
+import type { League, ProPlayer, ProSettings, ProStatus } from '@/lib/database.types';
 
 type Msg = { type: 'ok' | 'err'; text: string } | null;
 
@@ -32,8 +32,28 @@ const BLANK = {
   isHighlight: false,
 };
 
-export default function ProEditor({ players }: { players: ProPlayer[] }) {
+export default function ProEditor({
+  players,
+  settings,
+}: { players: ProPlayer[]; settings: ProSettings | null }) {
   const router = useRouter();
+
+  // ---- headline figures ----
+  const [nflActive, setNflActive] = useState(settings?.nfl_active?.toString() ?? '');
+  const [nbaActive, setNbaActive] = useState(settings?.nba_active?.toString() ?? '');
+  const [figuresNote, setFiguresNote] = useState(settings?.figures_note ?? '');
+  const [figMsg, setFigMsg] = useState<Msg>(null);
+  const [savingFigs, startFigs] = useTransition();
+
+  function saveFigures() {
+    setFigMsg(null);
+    startFigs(async () => {
+      const res = await updateProSettings({ nflActive, nbaActive, figuresNote });
+      setFigMsg({ type: res.ok ? 'ok' : 'err', text: res.message ?? '' });
+      if (res.ok) router.refresh();
+    });
+  }
+
   const [form, setForm] = useState({ ...BLANK });
   const [msg, setMsg] = useState<Msg>(null);
   const [saving, start] = useTransition();
@@ -95,6 +115,62 @@ export default function ProEditor({ players }: { players: ProPlayer[] }) {
 
   return (
     <div className="space-y-8">
+      {/* ---------------- headline figures ---------------- */}
+      <section className="card p-6">
+        <h2 className="font-display text-[19px] font-bold text-navy">Headline figures</h2>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500">
+          The real number of Wolverines on NFL and NBA rosters, entered by hand — not a
+          count of the profiles on this site. Leave blank to hide them.
+        </p>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label">Wolverines in the NFL</label>
+            <input
+              value={nflActive}
+              onChange={(e) => setNflActive(e.target.value)}
+              className="input"
+              placeholder="24"
+            />
+          </div>
+          <div>
+            <label className="label">Wolverines in the NBA</label>
+            <input
+              value={nbaActive}
+              onChange={(e) => setNbaActive(e.target.value)}
+              className="input"
+              placeholder="6"
+            />
+          </div>
+        </div>
+
+        <label className="label mt-3">Caption</label>
+        <input
+          value={figuresNote}
+          onChange={(e) => setFiguresNote(e.target.value)}
+          className="input"
+          placeholder="Active rosters as of the 2026 season"
+        />
+
+        {figMsg && (
+          <div className={`mt-3 flex items-start gap-2 rounded-xl px-4 py-2.5 text-[13.5px] font-medium ${
+            figMsg.type === 'ok'
+              ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border border-red-200 bg-red-50 text-red-700'
+          }`}>
+            {figMsg.type === 'ok'
+              ? <CheckCircle2 size={15} className="mt-0.5" />
+              : <AlertCircle size={15} className="mt-0.5" />}
+            {figMsg.text}
+          </div>
+        )}
+
+        <button onClick={saveFigures} disabled={savingFigs} className="btn-primary mt-4">
+          {savingFigs ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+          Save figures
+        </button>
+      </section>
+
       <section className="card p-6">
         <div className="flex items-center gap-3">
           <h2 className="font-display text-[19px] font-bold text-navy">
