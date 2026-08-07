@@ -72,7 +72,8 @@ export default async function ForumHome() {
           </h1>
           <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-slate-300">
             Game threads, hot takes, recruiting rumors and the occasional civil disagreement.
-            Every thread is moderated — keep it Michigan.
+            Michigan is the reason we&rsquo;re here, not the limit — take it wherever it goes,
+            and be decent to each other.
           </p>
 
           <div className="mt-7 flex flex-wrap items-center gap-6 text-sm">
