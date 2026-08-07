@@ -113,7 +113,10 @@ export default function PostComposer({
     const ext = file.name.split('.').pop() ?? 'jpg';
     const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const { error } = await supabase.storage.from('post-images').upload(path, file, {
-      cacheControl: '3600',
+      // A year. The path includes a timestamp and random suffix, so an upload
+      // is never overwritten — the file at this URL can't change, and a short
+      // TTL just means re-downloading it from Supabase forever.
+      cacheControl: '31536000',
       upsert: false,
     });
     if (error) {

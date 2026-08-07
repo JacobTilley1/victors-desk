@@ -59,7 +59,8 @@ export function ProfileForm({ profile }: { profile: Profile }) {
 
     const { error } = await supabase.storage
       .from('avatars')
-      .upload(path, file, { cacheControl: '3600', upsert: true });
+      // A year — the filename carries a timestamp, so each upload is a new URL.
+      .upload(path, file, { cacheControl: '31536000', upsert: true });
 
     if (error) {
       setUploading(false);
