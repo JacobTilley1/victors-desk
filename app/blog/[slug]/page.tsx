@@ -12,6 +12,7 @@ import SubscribeForm from '@/components/subscribe-form';
 import LikeButton from '@/components/like-button';
 import ShareButton from '@/components/share-button';
 import PostCard from '@/components/post-card';
+import ArchiveRail from '@/components/archive-rail';
 import { createClient } from '@/lib/supabase/server';
 import { getPostBySlug } from '@/lib/queries';
 import { getProfile, isAdmin } from '@/lib/auth';
@@ -289,6 +290,9 @@ export default async function PostPage({ params }: { params: { slug: string } })
           <Comments postId={post.id} slug={post.slug} comments={comments} viewer={profile} />
         </div>
       </div>
+
+      {/* Seeded off the slug so each article surfaces a different set. */}
+      <ArchiveRail seed={post.slug} />
 
       {relatedPosts.length > 0 && (
         <section className="border-t border-[var(--line)] bg-white/60 py-14">

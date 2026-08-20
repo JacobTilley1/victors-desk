@@ -10,6 +10,7 @@ import TeamBadge from '@/components/team-badge';
 import Avatar from '@/components/avatar';
 import EmptyState from '@/components/empty-state';
 import SubscribeForm from '@/components/subscribe-form';
+import ArchiveRail from '@/components/archive-rail';
 import { getPublishedPosts, getRecentThreads, getCommentCounts, getSiteStats, getMostRead } from '@/lib/queries';
 import { getProfile } from '@/lib/auth';
 import { TEAMS } from '@/lib/constants';
@@ -356,6 +357,15 @@ export default async function HomePage() {
           </aside>
         </div>
       </section>
+
+      {/*
+        Archive links from the home page.
+        This is the most-crawled page on the site, so it's the best place to
+        hand crawlers a path into deep history entries. The seed is today's
+        date, so the four rotate daily — roughly 28 different entries a week
+        get a link from here instead of the same four forever.
+      */}
+      <ArchiveRail seed={`home-${new Date().toISOString().slice(0, 10)}`} />
     </>
   );
 }
