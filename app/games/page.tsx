@@ -17,6 +17,14 @@ export const metadata = {
 
 const GAMES = [
   {
+    slug: 'guess-the-wolverine',
+    name: 'Guess the Wolverine',
+    kicker: 'New player every day at 5 a.m.',
+    blurb:
+      'Six guesses to name the Michigan player. Every guess tells you how close you are on position, era, jersey number and home state. Miss a day and you can still play it.',
+    tag: 'Daily',
+  },
+  {
     slug: 'hardwood-dynasty',
     name: 'Hardwood Dynasty',
     kicker: 'College basketball coach sim',

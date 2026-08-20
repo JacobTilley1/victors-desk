@@ -48,6 +48,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/pro`,        lastModified: now, changeFrequency: 'weekly',  priority: 0.8 },
     { url: `${SITE_URL}/games`,      lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${SITE_URL}/games/hardwood-dynasty`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
+    // The daily game itself, not the archive — individual puzzle pages are
+    // noindex on purpose, since hundreds of near-identical game screens are
+    // exactly the thin-content pattern to stay away from.
+    { url: `${SITE_URL}/games/guess-the-wolverine`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
     { url: `${SITE_URL}/about`,      lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${SITE_URL}/contact`,    lastModified: now, changeFrequency: 'yearly',  priority: 0.4 },
     { url: `${SITE_URL}/guidelines`, lastModified: now, changeFrequency: 'yearly',  priority: 0.3 },
