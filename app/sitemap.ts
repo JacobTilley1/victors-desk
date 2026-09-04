@@ -3,6 +3,8 @@ import { createPublicClient } from '@/lib/supabase/public';
 import { SITE_URL } from '@/lib/constants';
 import { getAllHistoryEntryPaths } from '@/lib/history';
 import { getAllProPlayerPaths } from '@/lib/pro';
+import { getAllCoachPaths } from '@/lib/coaches';
+import { getAllResultPaths } from '@/lib/results';
 
 // Rebuild the sitemap at most once an hour.
 export const revalidate = 3600;
@@ -10,7 +12,7 @@ export const revalidate = 3600;
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createPublicClient();
 
-  const [posts, categories, threads, authors, historyEntries, proPlayers] = await Promise.all([
+  const [posts, categories, threads, authors, historyEntries, proPlayers, coaches, results] = await Promise.all([
     supabase
       .from('posts')
       .select('slug, updated_at, published_at')
@@ -32,6 +34,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .eq('is_banned', false),
     getAllHistoryEntryPaths(),
     getAllProPlayerPaths(),
+    getAllCoachPaths(),
+    getAllResultPaths(),
   ]);
 
   const now = new Date();
@@ -45,6 +49,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/history/seasons`,        lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
     { url: `${SITE_URL}/history/the-game`,       lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
     { url: `${SITE_URL}/history/michigan-state`, lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
+    { url: `${SITE_URL}/history/coaches`,        lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
+    { url: `${SITE_URL}/history/results`,        lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
     { url: `${SITE_URL}/pro`,        lastModified: now, changeFrequency: 'weekly',  priority: 0.8 },
     { url: `${SITE_URL}/games`,      lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${SITE_URL}/games/hardwood-dynasty`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
@@ -109,6 +115,29 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
+  const gameRoutes: MetadataRoute.Sitemap = results.games.map((g) => ({
+    url: `${SITE_URL}/history/results/${g.slug}`,
+    lastModified: new Date(g.updated_at ?? now),
+    changeFrequency: 'yearly' as const,
+    priority: 0.7,
+  }));
+
+  // Series pages are the ones worth pushing — "michigan vs ohio state all
+  // time" is a query with real, permanent volume.
+  const seriesRoutes: MetadataRoute.Sitemap = results.opponents.map((slug) => ({
+    url: `${SITE_URL}/history/results/vs/${slug}`,
+    lastModified: now,
+    changeFrequency: 'monthly' as const,
+    priority: 0.8,
+  }));
+
+  const coachRoutes: MetadataRoute.Sitemap = coaches.map((c) => ({
+    url: `${SITE_URL}/history/coaches/${c.slug}`,
+    lastModified: new Date(c.updated_at ?? now),
+    changeFrequency: 'monthly' as const,
+    priority: 0.7,
+  }));
+
   const historyRoutes: MetadataRoute.Sitemap = historyEntries.map((h) => ({
     url: `${SITE_URL}/history/${h.slug}/${h.year}`,
     lastModified: new Date(h.updatedAt ?? now),
@@ -119,6 +148,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     ...staticRoutes,
     ...historyRoutes,
+    ...gameRoutes,
+    ...seriesRoutes,
+    ...coachRoutes,
     ...proRoutes,
     ...postRoutes,
     ...categoryRoutes,

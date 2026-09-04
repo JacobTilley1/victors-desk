@@ -14,7 +14,7 @@ export type { Wolverine };
 export const MAX_GUESSES = 6;
 
 /** First puzzle date, as a plain YYYY-MM-DD in Eastern time. */
-export const LAUNCH_DATE = '2026-08-20';
+export const LAUNCH_DATE = '2026-08-19';
 
 const ZONE = 'America/Detroit';
 const ROLLOVER_HOUR = 5;

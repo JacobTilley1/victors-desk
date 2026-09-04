@@ -138,7 +138,57 @@ export interface ProSettings {
   updated_at: string;
 }
 
-export type HistoryKind = 'season' | 'rivalry';
+export type GameSite = 'home' | 'away' | 'neutral';
+
+export interface HistoryGame {
+  id: string;
+  slug: string;
+  season: number;
+  game_date: string | null;
+  game_no: number | null;
+  opponent: string;
+  opponent_slug: string;
+  opponent_rank: number | null;
+  michigan_rank: number | null;
+  site: GameSite;
+  venue: string | null;
+  attendance: number | null;
+  result: 'W' | 'L' | 'T' | null;
+  points_for: number | null;
+  points_against: number | null;
+  coach: string | null;
+  postseason: string | null;
+  headline: string | null;
+  summary_html: string;
+  is_highlight: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type HistoryKind = 'season' | 'rivalry' | 'coach';
+
+export interface HistoryCoach {
+  id: string;
+  slug: string;
+  name: string;
+  tenure_from: number;
+  tenure_to: number | null;
+  is_current: boolean;
+  wins: number | null;
+  losses: number | null;
+  ties: number | null;
+  national_titles: number;
+  big_ten_titles: number;
+  bowl_record: string | null;
+  accolades: string | null;
+  nickname: string | null;
+  era_title: string | null;
+  portrait_url: string | null;
+  summary_html: string;
+  is_highlight: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface HistoryPage {
   id: string;
