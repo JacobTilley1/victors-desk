@@ -13,6 +13,8 @@ import LikeButton from '@/components/like-button';
 import ShareButton from '@/components/share-button';
 import PostCard from '@/components/post-card';
 import ArchiveRail from '@/components/archive-rail';
+import GiveawayCard from '@/components/giveaway-card';
+import { GIVEAWAY, isRunning } from '@/lib/giveaway';
 import { createClient } from '@/lib/supabase/server';
 import { getPostBySlug } from '@/lib/queries';
 import { getProfile, isAdmin } from '@/lib/auth';
@@ -88,6 +90,9 @@ export default async function PostPage({ params }: { params: { slug: string } })
   if (post.status === 'published') {
     await supabase.rpc('increment_post_views', { post_slug: post.slug });
   }
+
+  const giveawayLive = isRunning(GIVEAWAY);
+  const giveawaySlug = new URL(GIVEAWAY.href).pathname.replace('/blog/', '');
 
   const comments = (commentRows ?? []) as unknown as CommentWithAuthor[];
   const relatedPosts = (related ?? []) as unknown as PostWithAuthor[];
@@ -256,6 +261,15 @@ export default async function PostPage({ params }: { params: { slug: string } })
       <div className="container-page max-w-3xl py-12">
         <div className="prose-mich" dangerouslySetInnerHTML={{ __html: post.content_html }} />
 
+        {/*
+          Right after the last paragraph — the moment someone has finished and
+          is deciding what to do next. Suppressed on the giveaway article
+          itself, which already makes the pitch at length.
+        */}
+        {giveawayLive && post.slug !== giveawaySlug && (
+          <GiveawayCard source={post.slug} />
+        )}
+
         <div className="mt-10 flex flex-wrap items-center gap-3 border-y border-[var(--line)] py-5">
           <LikeButton
             postId={post.id}
@@ -282,9 +296,12 @@ export default async function PostPage({ params }: { params: { slug: string } })
           </div>
         )}
 
-        <div className="mt-10">
-          <SubscribeForm source={`post:${post.slug}`} />
-        </div>
+        {/* The plain newsletter block is the fallback once a giveaway ends. */}
+        {!giveawayLive && (
+          <div className="mt-10">
+            <SubscribeForm source={`post:${post.slug}`} />
+          </div>
+        )}
 
         <div className="mt-14">
           <Comments postId={post.id} slug={post.slug} comments={comments} viewer={profile} />
