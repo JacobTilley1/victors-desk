@@ -26,7 +26,19 @@ import { CheckCircle2, Loader2, X } from 'lucide-react';
 
 const KEY = 'vd:giveaway-bar';
 const REMEMBER_DAYS = 30;
-const TRIGGER = 0.55;
+
+/*
+ * Timing, tuned to appear early without ambushing anyone on load.
+ *
+ * It shows at whichever comes first — a little scrolling, or a few seconds of
+ * dwell. That covers both readers who skim fast and readers who sit on the
+ * first screen. The floor is what keeps it honest: nothing can appear in the
+ * first couple of seconds, so it never reads as a load-time interstitial, and
+ * a visitor who bounces immediately never sees it at all.
+ */
+const SCROLL_TRIGGER = 0.12;   // 12% down the page
+const DWELL_MS = 6000;         // …or six seconds, whichever lands first
+const MIN_DELAY_MS = 2500;     // never before this, whatever else happens
 
 /** Routes where the bar would be redundant or intrusive. */
 const HIDDEN_ON = [
@@ -74,21 +86,40 @@ export default function GiveawayBar() {
   useEffect(() => {
     if (suppressed || isDismissed()) return;
 
-    const onScroll = () => {
-      const doc = document.documentElement;
-      const max = doc.scrollHeight - window.innerHeight;
-      if (max <= 0) return;
-      if (window.scrollY / max >= TRIGGER) {
+    const mountedAt = Date.now();
+    let fired = false;
+    let dwellTimer: number | undefined;
+    let floorTimer: number | undefined;
+
+    const reveal = () => {
+      if (fired) return;
+      fired = true;
+      const wait = Math.max(0, MIN_DELAY_MS - (Date.now() - mountedAt));
+      floorTimer = window.setTimeout(() => {
         setVisible(true);
         // Next frame, so the transition has something to animate from.
         requestAnimationFrame(() => setShown(true));
-        window.removeEventListener('scroll', onScroll);
-      }
+      }, wait);
+      window.removeEventListener('scroll', onScroll);
     };
 
+    function onScroll() {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      // A page too short to scroll can't hit a percentage, so let the dwell
+      // timer handle it rather than never showing at all.
+      if (max <= 0) return;
+      if (window.scrollY / max >= SCROLL_TRIGGER) reveal();
+    }
+
     window.addEventListener('scroll', onScroll, { passive: true });
+    dwellTimer = window.setTimeout(reveal, DWELL_MS);
     onScroll();
-    return () => window.removeEventListener('scroll', onScroll);
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.clearTimeout(dwellTimer);
+      window.clearTimeout(floorTimer);
+    };
   }, [suppressed, pathname]);
 
   function close() {
