@@ -1,10 +1,22 @@
 import { createPublicClient } from '@/lib/supabase/public';
 import type { HistoryGame } from '@/lib/database.types';
 
+/*
+ * Explicit columns — history_games has an `fts` tsvector (migration 015) that
+ * `select('*')` would ship on every request. This table is designed to grow to
+ * every game in program history, so a series page or a season list would carry
+ * hundreds of unused search vectors. Never add `*` back here.
+ */
+const GAME_SELECT = `
+  id, slug, season, game_date, game_no, opponent, opponent_slug, opponent_rank,
+  michigan_rank, site, venue, attendance, result, points_for, points_against,
+  coach, postseason, headline, summary_html, is_highlight, created_at, updated_at
+`;
+
 /** Every game, newest first. */
 export async function getGames(season?: number): Promise<HistoryGame[]> {
   const supabase = createPublicClient(300);
-  let q = supabase.from('history_games').select('*');
+  let q = supabase.from('history_games').select(GAME_SELECT);
   if (season) q = q.eq('season', season);
   const { data } = await q
     .order('season', { ascending: false })
@@ -15,7 +27,7 @@ export async function getGames(season?: number): Promise<HistoryGame[]> {
 export async function getGame(slug: string) {
   const supabase = createPublicClient(120);
   const { data } = await supabase
-    .from('history_games').select('*').eq('slug', slug).maybeSingle();
+    .from('history_games').select(GAME_SELECT).eq('slug', slug).maybeSingle();
   if (!data) return null;
 
   const game = data as HistoryGame;
@@ -59,7 +71,7 @@ export async function getSeries(opponentSlug: string) {
   const supabase = createPublicClient(300);
   const { data } = await supabase
     .from('history_games')
-    .select('*')
+    .select(GAME_SELECT)
     .eq('opponent_slug', opponentSlug)
     .order('season', { ascending: false });
 

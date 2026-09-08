@@ -23,9 +23,17 @@ export default async function AuthorPage({ params }: { params: { id: string } })
   if (!row) notFound();
   const author = row as Profile;
 
+  // Card columns only, and note this query is deliberately unbounded — it's
+  // every article the author has published. On `select('*')` that meant the
+  // full body of the entire back catalogue on a page linked from every byline
+  // on the site.
   const { data: postRows } = await supabase
     .from('posts')
-    .select('*, author:profiles!posts_author_id_fkey ( id, display_name, avatar_url )')
+    .select(`
+      id, author_id, title, slug, excerpt, cover_image_url, team, status,
+      read_minutes, view_count, published_at, created_at, updated_at,
+      author:profiles!posts_author_id_fkey ( id, display_name, avatar_url )
+    `)
     .eq('author_id', author.id)
     .eq('status', 'published')
     .order('published_at', { ascending: false });

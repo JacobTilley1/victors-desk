@@ -3,6 +3,21 @@ import type { HistoryEntry, HistoryPage } from '@/lib/database.types';
 
 export { isRivalryPage } from '@/lib/history-shared';
 
+/*
+ * Explicit column list rather than `*`.
+ *
+ * history_entries carries an `fts` tsvector (migration 006). PostgREST returns
+ * it as text on `select('*')`, so a page with 130 season entries was shipping
+ * 130 serialised search vectors that nothing renders. Filtering on fts still
+ * works — you just must not select it.
+ *
+ * summary_html IS listed: the page renders teasers from it via entryTeaser().
+ */
+const ENTRY_SELECT = `
+  id, page_id, year, title, record, result, points_for, points_against,
+  opponent, venue, coach, summary_html, is_highlight, created_at, updated_at
+`;
+
 /** All reference pages, for the hub. */
 export async function getHistoryPages(): Promise<HistoryPage[]> {
   const supabase = createPublicClient(300);
@@ -20,7 +35,7 @@ export async function getHistoryPage(slug: string) {
 
   const { data: entries } = await supabase
     .from('history_entries')
-    .select('*')
+    .select(ENTRY_SELECT)
     .eq('page_id', (page as HistoryPage).id)
     .order('year', { ascending: false });
 
@@ -66,7 +81,7 @@ export async function getHistoryEntry(slug: string, year: number) {
 
   const { data: rows } = await supabase
     .from('history_entries')
-    .select('*')
+    .select(ENTRY_SELECT)
     .eq('page_id', (page as HistoryPage).id)
     .eq('year', year)
     .limit(1);

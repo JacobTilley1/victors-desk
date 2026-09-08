@@ -1,6 +1,17 @@
 import { createPublicClient } from '@/lib/supabase/public';
 import type { League, ProPlayer, ProSettings } from '@/lib/database.types';
 
+/*
+ * Explicit columns — pro_players has an `fts` tsvector (migration 010) that
+ * nothing renders. `select('*')` shipped it for every player on the hub.
+ */
+const PLAYER_SELECT = `
+  id, slug, name, league, position, pro_team, jersey_number, status,
+  michigan_years, michigan_note, draft_year, draft_round, draft_pick,
+  drafted_by, accolades, headshot_url, bio_html, is_highlight, sort_order,
+  created_at, updated_at
+`;
+
 /**
  * Hand-entered league totals.
  *
@@ -27,7 +38,7 @@ export function leagueLabel(l: League) {
 /** Everyone, for the hub. */
 export async function getProPlayers(league?: League): Promise<ProPlayer[]> {
   const supabase = createPublicClient(300);
-  let q = supabase.from('pro_players').select('*');
+  let q = supabase.from('pro_players').select(PLAYER_SELECT);
   if (league) q = q.eq('league', league);
   const { data } = await q
     .order('is_highlight', { ascending: false })
@@ -39,7 +50,7 @@ export async function getProPlayers(league?: League): Promise<ProPlayer[]> {
 export async function getProPlayer(slug: string): Promise<ProPlayer | null> {
   const supabase = createPublicClient(120);
   const { data } = await supabase
-    .from('pro_players').select('*').eq('slug', slug).maybeSingle();
+    .from('pro_players').select(PLAYER_SELECT).eq('slug', slug).maybeSingle();
   return (data as ProPlayer) ?? null;
 }
 

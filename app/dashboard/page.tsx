@@ -34,13 +34,21 @@ export default async function Dashboard() {
   if (!profile) redirect('/login?next=/dashboard');
 
   const supabase = createClient();
+  // Unbounded over the author's whole catalogue, and this list renders only
+  // status, title, team, dates and view counts. On `select('*')` every visit
+  // to your own dashboard pulled the full body, the ProseMirror JSON and the
+  // search vector for every article you have ever written.
   const { data } = await supabase
     .from('posts')
-    .select('*')
+    .select(`
+      id, author_id, title, slug, excerpt, cover_image_url, team, status,
+      review_note, reviewed_by, read_minutes, view_count, published_at,
+      created_at, updated_at
+    `)
     .eq('author_id', profile.id)
     .order('updated_at', { ascending: false });
 
-  const posts = (data ?? []) as Post[];
+  const posts = (data ?? []) as unknown as Post[];
 
   const [{ count: commentCount }, { count: threadCount }] = await Promise.all([
     supabase.from('comments').select('id', { count: 'exact', head: true }).eq('author_id', profile.id),

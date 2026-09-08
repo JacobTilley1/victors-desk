@@ -1,12 +1,22 @@
 import { createPublicClient } from '@/lib/supabase/public';
 import type { HistoryCoach } from '@/lib/database.types';
 
+/*
+ * Explicit columns — history_coaches has an `fts` tsvector (migration 014).
+ * See the note in lib/queries.ts: never `select('*')` on a table with fts.
+ */
+const COACH_SELECT = `
+  id, slug, name, tenure_from, tenure_to, is_current, wins, losses, ties,
+  national_titles, big_ten_titles, bowl_record, accolades, nickname,
+  era_title, portrait_url, summary_html, is_highlight, created_at, updated_at
+`;
+
 /** Newest tenure first, which is how people look for them. */
 export async function getCoaches(): Promise<HistoryCoach[]> {
   const supabase = createPublicClient(300);
   const { data } = await supabase
     .from('history_coaches')
-    .select('*')
+    .select(COACH_SELECT)
     .order('tenure_from', { ascending: false });
   return (data ?? []) as HistoryCoach[];
 }
@@ -14,7 +24,7 @@ export async function getCoaches(): Promise<HistoryCoach[]> {
 export async function getCoach(slug: string) {
   const supabase = createPublicClient(120);
   const { data } = await supabase
-    .from('history_coaches').select('*').eq('slug', slug).maybeSingle();
+    .from('history_coaches').select(COACH_SELECT).eq('slug', slug).maybeSingle();
   if (!data) return null;
 
   const coach = data as HistoryCoach;

@@ -2,9 +2,39 @@ import { createClient } from '@/lib/supabase/server';
 import { createPublicClient } from '@/lib/supabase/public';
 import type { PostWithAuthor, ThreadWithMeta } from '@/lib/database.types';
 
-const POST_SELECT = `
-  *,
+/*
+ * Never `select('*')` on posts.
+ *
+ * The table carries three columns that are enormous and that no listing view
+ * ever renders: content_html, content_json (the ProseMirror document, usually
+ * bigger than the HTML) and fts (a stored tsvector, serialised to text over
+ * the wire). Together they run ~30-40 KB per row on a normal article.
+ *
+ * A `*` card query therefore ships tens of kilobytes to render a headline and
+ * a thumbnail. The homepage alone pulls 70 rows — that is how this project
+ * burned 10 GB of Supabase egress in a month and got pushed onto a paid plan.
+ *
+ * CARD_SELECT is every column a PostCard actually touches, and nothing else.
+ */
+const CARD_SELECT = `
+  id, author_id, title, slug, excerpt, cover_image_url, team, status,
+  read_minutes, view_count, published_at, created_at, updated_at,
   author:profiles!posts_author_id_fkey ( id, display_name, avatar_url )
+`;
+
+/** The card columns plus the body — for the article page only. */
+const FULL_SELECT = `${CARD_SELECT}, content_html`;
+
+/*
+ * Same rule for threads: forum_threads has an fts tsvector (migration 004),
+ * and `body` is capped at 20,000 characters. Neither is rendered in a thread
+ * list — the homepage rail and the category index show titles and counts.
+ */
+const THREAD_SELECT = `
+  id, category_id, author_id, title, is_pinned, is_locked, is_hidden,
+  reply_count, view_count, last_activity_at, created_at,
+  author:profiles!forum_threads_author_id_fkey ( id, display_name, avatar_url, role ),
+  category:forum_categories!forum_threads_category_id_fkey ( id, name, slug, accent )
 `;
 
 export async function getPublishedPosts(opts: {
@@ -16,7 +46,7 @@ export async function getPublishedPosts(opts: {
   const supabase = createPublicClient();
   let q = supabase
     .from('posts')
-    .select(POST_SELECT, { count: 'exact' })
+    .select(CARD_SELECT, { count: 'exact' })
     .eq('status', 'published')
     // Scheduled posts carry a future published_at and stay hidden until then.
     .lte('published_at', new Date().toISOString())
@@ -37,7 +67,7 @@ export async function getPublishedPosts(opts: {
 
 export async function getPostBySlug(slug: string) {
   const supabase = createClient();
-  const { data } = await supabase.from('posts').select(POST_SELECT).eq('slug', slug).maybeSingle();
+  const { data } = await supabase.from('posts').select(FULL_SELECT).eq('slug', slug).maybeSingle();
   return (data as unknown as PostWithAuthor) ?? null;
 }
 
@@ -45,11 +75,7 @@ export async function getRecentThreads(limit = 6) {
   const supabase = createPublicClient(30);
   const { data } = await supabase
     .from('forum_threads')
-    .select(`
-      *,
-      author:profiles!forum_threads_author_id_fkey ( id, display_name, avatar_url, role ),
-      category:forum_categories!forum_threads_category_id_fkey ( id, name, slug, accent )
-    `)
+    .select(THREAD_SELECT)
     .eq('is_hidden', false)
     .order('last_activity_at', { ascending: false })
     .limit(limit);
@@ -106,19 +132,19 @@ export async function searchEverything(query: string) {
   const [postRes, threadRes] = await Promise.all([
     supabase
       .from('posts')
-      .select(POST_SELECT)
+      .select(CARD_SELECT)
       .eq('status', 'published')
       .lte('published_at', new Date().toISOString())
+      // Filtering on fts is free; *selecting* it is what costs. Results render
+      // as cards, so the body never has to cross the wire.
       .textSearch('fts', term, { type: 'websearch' })
       .order('published_at', { ascending: false })
       .limit(25),
     supabase
       .from('forum_threads')
-      .select(`
-        *,
-        author:profiles!forum_threads_author_id_fkey ( id, display_name, avatar_url, role ),
-        category:forum_categories!forum_threads_category_id_fkey ( id, name, slug, accent )
-      `)
+      // The one thread query that genuinely needs `body`: /search renders a
+      // two-line snippet of it under each result. Capped at 25 rows.
+      .select(`${THREAD_SELECT}, body`)
       .eq('is_hidden', false)
       .textSearch('fts', term, { type: 'websearch' })
       .order('last_activity_at', { ascending: false })
@@ -140,9 +166,12 @@ export async function searchEverything(query: string) {
  */
 export async function getMostRead(limit = 5): Promise<{ post: PostWithAuthor; views: number }[]> {
   const supabase = createPublicClient(600);
+  // 60 rows to rank 5. That is fine on CARD_SELECT (a few KB) and was
+  // catastrophic on `*` — this single query was the largest egress line item
+  // on the site, and it runs on the homepage.
   const { data } = await supabase
     .from('posts')
-    .select(POST_SELECT)
+    .select(CARD_SELECT)
     .eq('status', 'published')
     .lte('published_at', new Date().toISOString())
     .order('published_at', { ascending: false })

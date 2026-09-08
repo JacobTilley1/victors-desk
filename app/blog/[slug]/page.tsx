@@ -78,8 +78,14 @@ export default async function PostPage({ params }: { params: { slug: string } })
       ? supabase.from('post_likes').select('post_id').eq('post_id', post.id).eq('user_id', profile.id).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase
+      // Card columns only — these render as PostCards, so pulling content_html
+      // and content_json for three articles on every page view was pure waste.
       .from('posts')
-      .select('*, author:profiles!posts_author_id_fkey ( id, display_name, avatar_url )')
+      .select(`
+        id, author_id, title, slug, excerpt, cover_image_url, team, status,
+        read_minutes, view_count, published_at, created_at, updated_at,
+        author:profiles!posts_author_id_fkey ( id, display_name, avatar_url )
+      `)
       .eq('status', 'published')
       .eq('team', post.team)
       .neq('id', post.id)
