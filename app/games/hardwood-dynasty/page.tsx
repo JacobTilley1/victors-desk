@@ -58,7 +58,7 @@ export default async function HardwoodDynastyPage() {
                 <Save size={12} /> Saving to {profile.display_name.split(' ')[0]}
               </span>
             ) : (
-              <Link href="/login?next=/games/hardwood-dynasty" className="btn-primary btn-sm">
+              <Link href="/login?next=/games/hardwood-dynasty" rel="nofollow" className="btn-primary btn-sm">
                 <Save size={13} /> Sign in to save
               </Link>
             )}
@@ -112,7 +112,7 @@ export default async function HardwoodDynastyPage() {
                 you close the tab.
               </p>
               {!profile && (
-                <Link href="/login?next=/games/hardwood-dynasty" className="btn-primary btn-sm mt-4">
+                <Link href="/login?next=/games/hardwood-dynasty" rel="nofollow" className="btn-primary btn-sm mt-4">
                   Sign in with Google
                 </Link>
               )}

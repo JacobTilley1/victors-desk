@@ -161,7 +161,7 @@ export default async function ThreadPage({ params }: { params: { id: string } })
               <br />
               Sign in with Google to join the thread.
             </p>
-            <Link href={`/login?next=/forum/thread/${thread.id}`} className="btn-navy btn-sm shrink-0">
+            <Link href={`/login?next=/forum/thread/${thread.id}`} rel="nofollow" className="btn-navy btn-sm shrink-0">
               Sign in
             </Link>
           </div>

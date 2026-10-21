@@ -5,7 +5,21 @@ import Logo from '@/components/logo';
 import { getProfile } from '@/lib/auth';
 import { MessageSquare, PenLine, Users } from 'lucide-react';
 
-export const metadata = { title: 'Sign in' };
+/*
+ * noindex, and deliberately NOT disallowed in robots.txt.
+ *
+ * Those two rules fight each other. A URL blocked by robots.txt cannot be
+ * crawled, so Google never sees the noindex and the URL can sit in the index
+ * on link signals alone. To actually remove the /login?next=... URLs that are
+ * already discovered, Google has to be allowed to fetch them and read this.
+ *
+ * Once Search Console shows them gone, /login can go back in the disallow list
+ * to save crawl budget. Not before.
+ */
+export const metadata = {
+  title: 'Sign in',
+  robots: { index: false, follow: false },
+};
 
 export default async function LoginPage({
   searchParams,

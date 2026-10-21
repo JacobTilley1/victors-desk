@@ -61,7 +61,7 @@ export default async function CategoryPage({ params }: { params: { category: str
           {profile && !profile.is_banned ? (
             <NewThreadForm categoryId={category.id} categorySlug={category.slug} />
           ) : (
-            <Link href={`/login?next=/forum/${category.slug}`} className="btn-navy btn-sm">
+            <Link href={`/login?next=/forum/${category.slug}`} rel="nofollow" className="btn-navy btn-sm">
               Sign in to post
             </Link>
           )}

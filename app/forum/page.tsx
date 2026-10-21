@@ -84,7 +84,7 @@ export default async function ForumHome() {
               <MessageSquare size={15} className="text-maize" /> {(allThreads ?? []).length} threads
             </span>
             {!profile && (
-              <Link href="/login?next=/forum" className="btn-primary btn-sm">Sign in to post</Link>
+              <Link href="/login?next=/forum" rel="nofollow" className="btn-primary btn-sm">Sign in to post</Link>
             )}
           </div>
         </div>

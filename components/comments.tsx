@@ -49,7 +49,20 @@ export default function Comments({
               Sign in with Google to comment — it takes one tap.
             </p>
           </div>
-          <Link href={`/login?next=/blog/${slug}`} className="btn-navy btn-sm shrink-0">Sign in</Link>
+          {/*
+            nofollow matters here. This link is server-rendered on every
+            article, so without it Googlebot discovers one /login?next=<slug>
+            URL per post — an unbounded set of near-identical pages that all
+            render the same sign-in form. That is exactly what showed up in
+            Search Console.
+          */}
+          <Link
+            href={`/login?next=/blog/${slug}`}
+            rel="nofollow"
+            className="btn-navy btn-sm shrink-0"
+          >
+            Sign in
+          </Link>
         </div>
       )}
 
