@@ -249,37 +249,117 @@ select{background:var(--inset);border:1px solid var(--line2);color:var(--ink);bo
 (function () {
   var GAME = 'hardwood-dynasty';
   var api = '/api/games/saves';
+  var LS = 'hd:local:';
+
+  /*
+   * Two tiers, on purpose.
+   *
+   * localStorage is written first, synchronously, every time. It cannot fail
+   * for network reasons and it is what guarantees a career survives a refresh.
+   * The account save is attempted after, and its outcome is recorded rather
+   * than discarded, so the UI can tell the player the truth and so a broken
+   * API shows up immediately instead of silently for weeks.
+   */
+  var status = { account: null, local: false, error: null };
+  window.__vdSaveStatus = function () { return status; };
+
+  function lsSet(k, v) {
+    try { localStorage.setItem(LS + k, v); return true; } catch (e) { return false; }
+  }
+  function lsGet(k) {
+    try { return localStorage.getItem(LS + k); } catch (e) { return null; }
+  }
+  function lsDel(k) {
+    try { localStorage.removeItem(LS + k); } catch (e) {}
+  }
+
+  function logFail(where, msg) {
+    status.account = false;
+    status.error = msg;
+    try { console.error('[hardwood-dynasty] ' + where + ': ' + msg); } catch (e) {}
+  }
 
   window.storage = {
+    /* Account copy wins when present; the device copy is the safety net. */
     get: function (key) {
       return fetch(api + '?game=' + GAME + '&key=' + encodeURIComponent(key), {
         credentials: 'same-origin',
-      }).then(function (r) {
-        if (r.status === 401) { window.__vdNeedsAuth(); throw new Error('auth'); }
-        if (!r.ok) throw new Error('failed');
-        return r.json();
-      }).then(function (j) {
-        if (j.value == null) throw new Error('empty');
-        return { value: j.value };
-      });
+      })
+        .then(function (r) {
+          if (r.status === 401) { window.__vdNeedsAuth(); return null; }
+          if (!r.ok) { logFail('load', 'HTTP ' + r.status); return null; }
+          return r.json();
+        })
+        .catch(function (e) {
+          logFail('load', (e && e.message) || 'network error');
+          return null;
+        })
+        .then(function (j) {
+          var v = j && j.value != null ? j.value : lsGet(key);
+          if (v == null) throw new Error('empty');
+          return { key: key, value: v };
+        });
     },
+
+    /*
+     * Never rejects. A rejected promise here was being swallowed upstream, so
+     * resolving with a recorded status is both safer and more honest.
+     */
     set: function (key, value) {
+      status.local = lsSet(key, value);
+      status.error = null;
+
+      var done = { key: key, value: value };
+
       return fetch(api, {
         method: 'PUT',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game: GAME, key: key, value: value }),
-      }).then(function (r) {
-        if (r.status === 401) { window.__vdNeedsAuth(); throw new Error('auth'); }
-        if (!r.ok) throw new Error('failed');
-        return true;
-      });
+      })
+        .then(function (r) {
+          if (r.status === 401) {
+            status.account = false;
+            window.__vdNeedsAuth();
+            return done;
+          }
+          if (!r.ok) {
+            return r.text().catch(function () { return ''; }).then(function (t) {
+              logFail('save', 'HTTP ' + r.status + (t ? ' - ' + t.slice(0, 200) : ''));
+              return done;
+            });
+          }
+          status.account = true;
+          return done;
+        })
+        .catch(function (e) {
+          logFail('save', (e && e.message) || 'network error');
+          return done;
+        });
     },
+
     delete: function (key) {
+      lsDel(key);
       return fetch(api + '?game=' + GAME + '&key=' + encodeURIComponent(key), {
         method: 'DELETE',
         credentials: 'same-origin',
-      }).then(function (r) { return r.ok; });
+      })
+        .then(function (r) { return r.ok; })
+        .catch(function () { return true; });
+    },
+
+    list: function (prefix) {
+      var keys = [];
+      try {
+        for (var n = 0; n < localStorage.length; n++) {
+          var k = localStorage.key(n);
+          if (k && k.indexOf(LS) === 0) {
+            var bare = k.slice(LS.length);
+            if (!prefix || bare.indexOf(prefix) === 0) keys.push(bare);
+          }
+        }
+      } catch (e) {}
+      return Promise.resolve({ keys: keys });
     },
   };
 
@@ -293,8 +373,8 @@ select{background:var(--inset);border:1px solid var(--line2);color:var(--ink);bo
       'padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:center;' +
       'font-family:system-ui,sans-serif;font-size:14px;box-shadow:0 -6px 24px rgba(0,0,0,.35)';
     bar.innerHTML =
-      '<span>Sign in to save your dynasty — progress is kept to your account.</span>' +
-      '<a href="/login?next=/games/hardwood-dynasty" style="background:#FFCB05;color:#00274D;' +
+      '<span>Your career is saved on this device. Sign in to keep it on your account.</span>' +
+      '<a href="/login?next=/games/hardwood-dynasty" target="_top" style="background:#FFCB05;color:#00274D;' +
       'font-weight:700;padding:7px 14px;border-radius:9px;text-decoration:none">Sign in</a>' +
       '<button style="background:none;border:0;color:#9fb3c8;cursor:pointer;font-size:18px">&times;</button>';
     bar.querySelector('button').onclick = function () { bar.remove(); barShown = false; };
@@ -302,9 +382,9 @@ select{background:var(--inset);border:1px solid var(--line2);color:var(--ink);bo
   };
 
   // Probe once on load so the prompt appears before someone plays for an hour.
-  fetch(api + '?game=' + GAME, { credentials: 'same-origin' }).then(function (r) {
-    if (r.status === 401) window.__vdNeedsAuth();
-  }).catch(function () {});
+  fetch(api + '?game=' + GAME, { credentials: 'same-origin' })
+    .then(function (r) { if (r.status === 401) window.__vdNeedsAuth(); })
+    .catch(function () {});
 })();
 </script>
 <script>
@@ -1937,16 +2017,26 @@ function retireNow(){
 ===================================================== */
 const slotKey=n=>"hd:slot:"+n;
 function saveGame(){
-  if(!G||G.slot==null)return;
+  // Returns a promise now. The 23 fire-and-forget call sites are unaffected,
+  // but saveNow() can await it and report what actually happened.
+  if(!G||G.slot==null)return Promise.resolve(false);
   G.nextId=NEXT_ID;
-  try{store.set(slotKey(G.slot),JSON.stringify(G)).catch(()=>{});}catch(e){}
+  try{
+    return store.set(slotKey(G.slot),JSON.stringify(G)).then(()=>true).catch(e=>{
+      console.error("[hardwood-dynasty] saveGame failed",e);return false;
+    });
+  }catch(e){console.error("[hardwood-dynasty] saveGame threw",e);return Promise.resolve(false);}
 }
 async function refreshSlots(){
   for(let n=1;n<=3;n++){
     try{const r=await store.get(slotKey(n));const d=JSON.parse(r.value);
       const live=(d.phase==="post"||d.phase==="off"||d.finished)?0:1;
       UI.slots[n-1]={coach:d.coach.name,team:d.teams[d.coach.teamId].name,year:d.seasonYear,w:d.coach.career.w+(d.teams[d.coach.teamId].w||0)*live,l:d.coach.career.l+(d.teams[d.coach.teamId].l||0)*live,chips:d.coach.career.chips,fin:d.finished};
-    }catch(e){UI.slots[n-1]=null;}
+    }catch(e){
+      // "empty" is a real empty slot. Anything else is a fault worth seeing.
+      if(!e||e.message!=="empty")console.error("[hardwood-dynasty] slot "+n+" load failed",e);
+      UI.slots[n-1]=null;
+    }
   }
 }
 async function loadSlotBtn(n){
@@ -1958,10 +2048,22 @@ async function loadSlotBtn(n){
 async function delSlotBtn(n){
   if(UI.delArm!==n){UI.delArm=n;render();return;}
   UI.delArm=null;
-  try{await store.delete(slotKey(n));}catch(e){}
+  try{await store.delete(slotKey(n));}
+  catch(e){console.error("[hardwood-dynasty] slot "+n+" delete failed",e);}
   UI.slots[n-1]=null;render();
 }
-function saveNow(){saveGame();const el=document.getElementById("savemsg");if(el){el.textContent="Saved.";setTimeout(()=>{el.textContent="";},1500);}}
+async function saveNow(){
+  const el=document.getElementById("savemsg");
+  const show=(txt,ok)=>{if(!el)return;el.textContent=txt;el.style.color=ok?"":"#ff6b6b";
+    setTimeout(()=>{el.textContent="";el.style.color="";},ok?2500:7000);};
+  if(!G||G.slot==null){show("Start a career first.",false);return;}
+  if(el){el.textContent="Saving...";el.style.color="";}
+  await saveGame();
+  const st=window.__vdSaveStatus?window.__vdSaveStatus():null;
+  if(st&&st.account)show("Saved to your account.",true);
+  else if(st&&st.local)show("Saved on this device - sign in to sync.",true);
+  else show("Save failed"+(st&&st.error?": "+st.error:"."),false);
+}
 
 /* =====================================================
    RENDER HELPERS
