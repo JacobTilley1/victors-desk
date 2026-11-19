@@ -25,7 +25,15 @@ export async function GET() {
     .eq('status', 'published')
     .lte('published_at', new Date().toISOString())
     .order('published_at', { ascending: false })
-    .limit(30);
+    /*
+     * 15 rather than 30. Each item carries the article's full content_html, so
+     * the feed is one of the largest responses the site serves, and feed
+     * readers re-fetch it on a schedule whether or not anything changed.
+     * Fifteen entries is a normal feed depth and halves the payload without
+     * costing a subscriber anything — nobody is scrolling to post 29 in an
+     * RSS reader.
+     */
+    .limit(15);
 
   type Row = {
     title: string;

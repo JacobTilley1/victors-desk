@@ -72,3 +72,21 @@ export function relative(iso: string | null) {
 export function initials(name: string) {
   return name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
 }
+
+/**
+ * Add lazy loading to images inside stored HTML.
+ *
+ * Article bodies are authored in the editor and saved as raw HTML, so their
+ * <img> tags point straight at Supabase Storage and never pass through
+ * next/image. Without loading="lazy", opening a long article downloads every
+ * image in it on first paint — including the ones the reader never scrolls to.
+ *
+ * Only rewrites tags that don't already declare `loading`, so an explicit
+ * loading="eager" in the source is respected.
+ */
+export function lazyLoadImages(html: string) {
+  return html.replace(
+    /<img\b(?![^>]*\bloading=)/gi,
+    '<img loading="lazy" decoding="async"'
+  );
+}

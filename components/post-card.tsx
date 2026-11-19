@@ -15,12 +15,19 @@ export default function PostCard({
     <article className="group card overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_28px_60px_-28px_rgba(0,39,77,0.5)]">
       <Link href={`/blog/${post.slug}`} className="block">
         <div className="relative aspect-[16/9] overflow-hidden bg-navy">
+          {/*
+            quality 65 rather than the default 75. A card thumbnail is never
+            rendered above 380px wide, and at that size the difference is not
+            visible — but it is about a fifth of the bytes, multiplied by every
+            card on every index page.
+          */}
           {post.cover_image_url ? (
             <Image
               src={post.cover_image_url}
               alt={post.title}
               fill
               priority={priority}
+              quality={65}
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 380px"
               className="object-cover transition-transform duration-700 group-hover:scale-[1.06]"
             />

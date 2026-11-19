@@ -26,6 +26,28 @@ const nextConfig = {
      * overwritten, so the images are immutable and safe to cache indefinitely.
      */
     minimumCacheTTL: 31536000,
+
+    /*
+     * AVIF first, WebP as the fallback.
+     *
+     * AVIF runs roughly 30% smaller than WebP at the same visual quality, and
+     * every one of those bytes is origin transfer on the way out. The encode
+     * is more expensive, but an optimized image is cached for a year, so that
+     * cost is paid once per variant and the saving is paid back on every view.
+     */
+    formats: ['image/avif', 'image/webp'],
+
+    /*
+     * The widths the optimizer is allowed to produce.
+     *
+     * Next's defaults run to 2048 and 3840. Nothing on this site displays an
+     * image above 1200px — the article hero is capped there and post cards
+     * render at 380 — so those two widths existed only to be generated and
+     * shipped at enormous size whenever a browser asked for them. Removing
+     * them from the list means they can never be requested.
+     */
+    deviceSizes: [640, 750, 828, 1080, 1200],
+    imageSizes: [32, 64, 96, 128, 256, 384],
   },
 
   /**

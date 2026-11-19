@@ -18,7 +18,7 @@ import { GIVEAWAY, isRunning } from '@/lib/giveaway';
 import { createClient } from '@/lib/supabase/server';
 import { getPostBySlug } from '@/lib/queries';
 import { getProfile, isAdmin } from '@/lib/auth';
-import { formatDate } from '@/lib/utils';
+import { formatDate, lazyLoadImages } from '@/lib/utils';
 import { SITE, SITE_URL, TEAM_LABEL } from '@/lib/constants';
 import { Clock, Eye, PenLine, AlertTriangle } from 'lucide-react';
 import type { CommentWithAuthor, PostWithAuthor } from '@/lib/database.types';
@@ -191,12 +191,20 @@ export default async function PostPage({ params }: { params: { slug: string } })
       <header className="relative overflow-hidden bg-navy text-white">
         {post.cover_image_url && (
           <>
+            {/*
+              This is decorative: it sits at 25% opacity under a navy gradient
+              and nobody can make out detail in it. sizes="100vw" was asking
+              the optimizer for a 1920px-wide image to render a blur, and
+              every one of those bytes is origin transfer. Capped width and
+              low quality are invisible here and a fraction of the payload.
+            */}
             <Image
               src={post.cover_image_url}
               alt=""
               fill
               priority
-              sizes="100vw"
+              quality={40}
+              sizes="(max-width: 768px) 100vw, 1200px"
               className="object-cover opacity-25"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/85 to-navy/60" />
@@ -265,7 +273,10 @@ export default async function PostPage({ params }: { params: { slug: string } })
 
       {/* body */}
       <div className="container-page max-w-3xl py-12">
-        <div className="prose-mich" dangerouslySetInnerHTML={{ __html: post.content_html }} />
+        <div
+          className="prose-mich"
+          dangerouslySetInnerHTML={{ __html: lazyLoadImages(post.content_html) }}
+        />
 
         {/*
           Right after the last paragraph — the moment someone has finished and
