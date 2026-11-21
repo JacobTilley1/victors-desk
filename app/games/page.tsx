@@ -32,6 +32,14 @@ const GAMES = [
       'Take a job, build a roster, recruit, survive the carousel and chase a title. A full coaching career, one season at a time.',
     tag: 'Career sim',
   },
+  {
+    slug: 'gridiron-dynasty',
+    name: 'Gridiron Dynasty',
+    kicker: 'College football coach sim',
+    blurb:
+      '120 real FBS programs across ten conferences. Build a depth chart, work the portal, win the league and get into a twelve-team playoff — or get run out of town trying.',
+    tag: 'Career sim',
+  },
 ];
 
 export default function GamesHub() {
