@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sports Empire — Idle Sports Tycoon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Instrument+Sans:wght@400;500;600;700&family=Chivo+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* Midnight arena: deep indigo, electric gold, a teal second accent.
+   Deliberately distinct from Hardwood's bronze and Gridiron's turf. */
+:root{
+  --bg:#0B0F1E; --panel:#141A33; --panel2:#101629; --inset:#070A16;
+  --line:#242D4E; --line2:#35406B;
+  --ink:#EEF1FA; --muted:#97A2C4; --dim:#616C92;
+  --gold:#FFC53D; --gold2:#C9930F; --teal:#3DD6C4; --violet:#9B7BF0;
+  --win:#5BD98A; --loss:#F0736A; --rose:#F58BB0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:'Instrument Sans',system-ui,sans-serif; font-size:15px; line-height:1.45;
+  background-image:
+    radial-gradient(ellipse 900px 460px at 18% -12%, rgba(255,197,61,.11), transparent 60%),
+    radial-gradient(ellipse 760px 420px at 88% -6%, rgba(61,214,196,.09), transparent 62%),
+    linear-gradient(180deg,#0E1428 0%, #0B0F1E 42%);
+  background-attachment:fixed; min-height:100vh;
+}
+.wrap{max-width:1120px;margin:0 auto;padding:0 14px 90px}
+h1,h2,h3,.disp{font-family:'Big Shoulders Display',sans-serif;letter-spacing:.03em;text-transform:uppercase}
+.mono{font-family:'Chivo Mono',monospace}
+.muted{color:var(--muted)} .dim{color:var(--dim)} .gold{color:var(--gold)}
+.good{color:var(--win)} .bad{color:var(--loss)} .teal{color:var(--teal)}
+.sm{font-size:12.5px} .xs{font-size:11px}
+.right{text-align:right} .center{text-align:center}
+.mt{margin-top:14px}.mt2{margin-top:22px}.mb{margin-bottom:12px}
+
+/* ---------------- top bar ---------------- */
+.top{position:sticky;top:0;z-index:60;background:linear-gradient(180deg,#080C19 0%,#0B0F1E 100%);
+  border-bottom:1px solid var(--line);box-shadow:0 8px 26px rgba(0,0,0,.6)}
+.topin{max-width:1120px;margin:0 auto;padding:11px 14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{font-family:'Big Shoulders Display';font-weight:800;font-size:23px;letter-spacing:.06em;line-height:1}
+.brand small{display:block;font-family:'Instrument Sans';font-weight:600;font-size:9.5px;
+  letter-spacing:.3em;color:var(--muted);margin-top:3px}
+.bank{margin-left:auto;text-align:right}
+.bank .amt{font-family:'Chivo Mono';font-weight:700;font-size:28px;color:var(--gold);
+  text-shadow:0 0 18px rgba(255,197,61,.35);line-height:1.05}
+.bank .rate{font-size:12px;color:var(--teal);font-family:'Chivo Mono'}
+.bank .amt.pop{animation:pop .22s ease}
+@keyframes pop{0%{transform:scale(1)}45%{transform:scale(1.045)}100%{transform:scale(1)}}
+
+.nav{max-width:1120px;margin:0 auto;display:flex;gap:2px;overflow-x:auto;padding:0 14px;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.tab{font-family:'Big Shoulders Display';font-weight:600;font-size:15px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;
+  padding:9px 12px 7px;cursor:pointer;white-space:nowrap}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--gold);border-bottom-color:var(--gold)}
+.tab .dotn{display:inline-block;min-width:16px;padding:0 4px;margin-left:5px;border-radius:8px;
+  background:var(--gold);color:#1A1203;font-size:10px;font-weight:700;vertical-align:1px}
+
+/* ---------------- buttons ---------------- */
+.btn{font-family:'Big Shoulders Display';font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  font-size:15px;border-radius:6px;cursor:pointer;padding:9px 16px;border:1px solid var(--line2);
+  background:var(--panel);color:var(--ink);transition:transform .05s,filter .12s}
+.btn:active{transform:translateY(1px)}
+.btn-p{background:linear-gradient(180deg,#FFD264,#D99A0C);border-color:#8A6208;color:#1C1403;
+  box-shadow:0 2px 0 #7A5607, inset 0 1px 0 rgba(255,255,255,.4)}
+.btn-p:hover{filter:brightness(1.06)}
+.btn-t{background:linear-gradient(180deg,#52E6D4,#1FA797);border-color:#12685E;color:#032420;
+  box-shadow:0 2px 0 #0F5D54, inset 0 1px 0 rgba(255,255,255,.35)}
+.btn-g{background:transparent;border-color:var(--line2);color:var(--muted)}
+.btn-g:hover{color:var(--ink);border-color:var(--gold2)}
+.btn-sm{font-size:12.5px;padding:5px 11px}
+.btn:disabled{opacity:.36;cursor:not-allowed;filter:grayscale(.5)}
+.btn-danger{border-color:#6E2C28;color:var(--loss)}
+
+/* ---------------- cards ---------------- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-top:14px}
+.card-t{font-family:'Big Shoulders Display';font-weight:800;font-size:18px;letter-spacing:.06em;
+  text-transform:uppercase;display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.card-t .rule{flex:1;height:1px;background:var(--line)}
+.eyebrow{font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold2);font-weight:700}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:860px){.grid3,.grid4{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.grid2,.grid3,.grid4{grid-template-columns:1fr}}
+
+/* ---------------- division row ---------------- */
+.div{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:12px 14px;margin-top:10px;overflow:hidden;transition:border-color .2s}
+.div.owned{border-color:var(--line2)}
+.div.locked{opacity:.5}
+.div .fill{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,rgba(255,197,61,.16),rgba(255,197,61,.04));
+  width:0;transition:width .12s linear;pointer-events:none}
+.div .row{position:relative;display:flex;align-items:center;gap:13px;flex-wrap:wrap}
+.emoji{font-size:26px;width:38px;text-align:center;flex:none;filter:drop-shadow(0 2px 5px rgba(0,0,0,.6))}
+.dname{font-family:'Big Shoulders Display';font-weight:800;font-size:18px;letter-spacing:.04em;line-height:1.1}
+.dsub{font-size:11.5px;color:var(--dim)}
+.dcount{font-family:'Chivo Mono';font-weight:700;font-size:20px;color:var(--gold);min-width:52px;text-align:right}
+.dout{font-family:'Chivo Mono';font-size:12px;color:var(--teal)}
+.dbuy{margin-left:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.mstone{font-size:10px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+.mbar{height:5px;background:var(--inset);border-radius:3px;overflow:hidden;margin-top:4px;min-width:90px}
+.mbar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold2),var(--gold))}
+
+/* ---------------- misc ---------------- */
+.stat{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+.stat .k{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.stat .v{font-family:'Chivo Mono';font-weight:700;font-size:19px;margin-top:2px}
+.up{display:flex;gap:11px;align-items:center;background:var(--panel2);border:1px solid var(--line);
+  border-radius:9px;padding:10px 12px;margin-top:9px;transition:border-color .15s}
+.up.can{border-color:var(--gold2)}
+.up.bought{opacity:.52}
+.up .ui{font-size:22px;width:32px;text-align:center;flex:none}
+.up .un{font-weight:600;font-size:14px}
+.up .ud{font-size:11.5px;color:var(--dim)}
+.up .uc{margin-left:auto;text-align:right;flex:none}
+.ach{display:flex;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--line);
+  border-radius:9px;padding:9px 11px}
+.ach.got{border-color:var(--gold2);background:linear-gradient(180deg,rgba(255,197,61,.09),var(--panel2))}
+.ach .ai{font-size:20px;width:28px;text-align:center;flex:none;filter:grayscale(1);opacity:.4}
+.ach.got .ai{filter:none;opacity:1}
+.pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.08em;padding:2px 8px;
+  border-radius:4px;text-transform:uppercase}
+.pill-g{background:#3A2E09;color:var(--gold)} .pill-t{background:#0B3A36;color:var(--teal)}
+.pill-m{background:#1C2340;color:var(--muted)}
+.tag{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.1em;padding:1px 6px;
+  border-radius:3px;text-transform:uppercase;margin-left:6px;background:#2A2142;color:var(--violet)}
+
+/* floating click gains */
+.float{position:fixed;pointer-events:none;z-index:200;font-family:'Chivo Mono';font-weight:700;
+  font-size:17px;color:var(--gold);text-shadow:0 2px 10px rgba(0,0,0,.8);animation:floatup 1s ease-out forwards}
+@keyframes floatup{0%{opacity:1;transform:translateY(0) scale(1)}
+  100%{opacity:0;transform:translateY(-58px) scale(1.25)}}
+
+/* prestige confetti */
+.conf{position:fixed;top:-12px;width:9px;height:14px;z-index:190;pointer-events:none;border-radius:2px;
+  animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(105vh) rotate(760deg);opacity:.15}}
+
+/* achievement toast */
+.toastwrap{position:fixed;right:16px;bottom:16px;z-index:210;display:flex;flex-direction:column;gap:8px}
+.toast{background:linear-gradient(180deg,#1C2444,#141A33);border:1px solid var(--gold2);border-radius:10px;
+  padding:10px 14px;box-shadow:0 12px 34px rgba(0,0,0,.6);display:flex;gap:10px;align-items:center;
+  animation:slidein .3s ease, fadeout .4s ease 4.1s forwards;max-width:330px}
+@keyframes slidein{from{opacity:0;transform:translateX(34px)}to{opacity:1;transform:none}}
+@keyframes fadeout{to{opacity:0;transform:translateX(34px)}}
+
+/* sparkline */
+.spark{width:100%;height:46px;display:block}
+
+/* big click button */
+.gate{width:100%;padding:16px;border-radius:12px;border:1px solid #8A6208;cursor:pointer;
+  background:linear-gradient(180deg,#FFD264,#D99A0C);color:#1C1403;font-family:'Big Shoulders Display';
+  font-weight:800;font-size:21px;letter-spacing:.07em;text-transform:uppercase;
+  box-shadow:0 3px 0 #7A5607, inset 0 1px 0 rgba(255,255,255,.45);transition:transform .05s}
+.gate:active{transform:translateY(2px);box-shadow:0 1px 0 #7A5607, inset 0 1px 0 rgba(255,255,255,.45)}
+.gate small{display:block;font-family:'Instrument Sans';font-weight:600;font-size:11.5px;
+  letter-spacing:.12em;opacity:.78;margin-top:2px}
+
+.slot{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.slot:last-child{border-bottom:none}
+.slot .info{flex:1;min-width:170px}
+.chip{display:inline-block;font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:14px;
+  border:1px solid var(--line2);color:var(--muted);cursor:pointer;margin:0 5px 5px 0}
+.chip.on{background:var(--gold2);border-color:var(--gold);color:#1C1403}
+.bignum{font-family:'Chivo Mono';font-weight:700;font-size:34px;color:var(--gold)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toastwrap" id="toasts"></div>
+<script>
+/* ===========================================================
+   The Victors' Desk — account-backed saves.
+   Same two-tier shim the other games use: localStorage first
+   and unconditionally, the account call after, with its real
+   outcome recorded rather than swallowed.
+=========================================================== */
+(function () {
+  var GAME = 'sports-empire';
+  var api = '/api/games/saves';
+  var LS = 'se:local:';
+  var status = { account: null, local: false, error: null };
+  window.__vdSaveStatus = function () { return status; };
+
+  function lsSet(k, v) { try { localStorage.setItem(LS + k, v); return true; } catch (e) { return false; } }
+  function lsGet(k) { try { return localStorage.getItem(LS + k); } catch (e) { return null; } }
+  function lsDel(k) { try { localStorage.removeItem(LS + k); } catch (e) {} }
+  function logFail(where, msg) {
+    status.account = false; status.error = msg;
+    try { console.error('[sports-empire] ' + where + ': ' + msg); } catch (e) {}
+  }
+
+  window.storage = {
+    get: function (key) {
+      return fetch(api + '?game=' + GAME + '&key=' + encodeURIComponent(key), { credentials: 'same-origin' })
+        .then(function (r) {
+          if (r.status === 401) { window.__vdNeedsAuth(); return null; }
+          if (!r.ok) { logFail('load', 'HTTP ' + r.status); return null; }
+          return r.json();
+        })
+        .catch(function (e) { logFail('load', (e && e.message) || 'network error'); return null; })
+        .then(function (j) {
+          var v = j && j.value != null ? j.value : lsGet(key);
+          if (v == null) throw new Error('empty');
+          return { key: key, value: v };
+        });
+    },
+    set: function (key, value) {
+      status.local = lsSet(key, value); status.error = null;
+      var done = { key: key, value: value };
+      return fetch(api, { method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game: GAME, key: key, value: value }) })
+        .then(function (r) {
+          if (r.status === 401) { status.account = false; window.__vdNeedsAuth(); return done; }
+          if (!r.ok) return r.text().catch(function(){return '';}).then(function (t) {
+            logFail('save', 'HTTP ' + r.status + (t ? ' - ' + t.slice(0, 200) : '')); return done; });
+          status.account = true; return done;
+        })
+        .catch(function (e) { logFail('save', (e && e.message) || 'network error'); return done; });
+    },
+    delete: function (key) {
+      lsDel(key);
+      return fetch(api + '?game=' + GAME + '&key=' + encodeURIComponent(key),
+        { method: 'DELETE', credentials: 'same-origin' })
+        .then(function (r) { return r.ok; }).catch(function () { return true; });
+    }
+  };
+
+  var barShown = false;
+  window.__vdNeedsAuth = function () {
+    if (barShown) return;
+    barShown = true;
+    var bar = document.createElement('div');
+    bar.style.cssText =
+      'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#0B0F1E;color:#fff;border-top:2px solid #FFC53D;' +
+      'padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:center;' +
+      'font-family:system-ui,sans-serif;font-size:14px;box-shadow:0 -6px 24px rgba(0,0,0,.5)';
+    bar.innerHTML =
+      '<span>Your empire is saved on this device. Sign in to keep it on your account.</span>' +
+      '<a href="/login?next=/games/sports-empire" target="_top" style="background:#FFC53D;color:#1C1403;' +
+      'font-weight:700;padding:7px 14px;border-radius:9px;text-decoration:none">Sign in</a>' +
+      '<button style="background:none;border:0;color:#97A2C4;cursor:pointer;font-size:18px">&times;</button>';
+    bar.querySelector('button').onclick = function () { bar.remove(); barShown = false; };
+    document.body.appendChild(bar);
+  };
+
+  fetch(api + '?game=' + GAME, { credentials: 'same-origin' })
+    .then(function (r) { if (r.status === 401) window.__vdNeedsAuth(); })
+    .catch(function () {});
+})();
+</script>
+<script>
+/* =====================================================
+   SPORTS EMPIRE — engine
+   ===================================================== */
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const now=()=>Date.now();
+
+/* ---------- number formatting ---------- */
+const SUF=["","K","M","B","T","Qa","Qi","Sx","Sp","Oc","No","Dc","Ud","Dd","Td","Qad","Qid"];
+function fmt(n,dp){
+  if(!isFinite(n))return"∞";
+  if(n<0)return"-"+fmt(-n,dp);
+  if(n<1000)return n<10&&dp!==0?(Math.round(n*10)/10).toFixed(1).replace(/\.0$/,""):String(Math.floor(n));
+  const t=Math.floor(Math.log10(n)/3);
+  const s=SUF[t]||("e"+t*3);
+  const v=n/Math.pow(1000,t);
+  return (v<10?v.toFixed(2):v<100?v.toFixed(1):Math.floor(v))+s;
+}
+const money=n=>"$"+fmt(n);
+function dur(ms){
+  if(!isFinite(ms)||ms<0)return"—";
+  const s=Math.floor(ms/1000);
+  if(s<60)return s+"s";
+  if(s<3600)return Math.floor(s/60)+"m "+(s%60)+"s";
+  if(s<86400)return Math.floor(s/3600)+"h "+Math.floor(s%3600/60)+"m";
+  return Math.floor(s/86400)+"d "+Math.floor(s%86400/3600)+"h";
+}
+
+/* =====================================================
+   DIVISIONS
+   id, emoji, name, flavour, base cost, base $/sec, cost growth
+   The cost curve roughly doubles the time-to-unlock each tier,
+   which is the classic idle shape: the first few land in under a
+   minute, the last few are a rebirth away.
+   ===================================================== */
+const DIVS=[
+ {id:"ll", e:"🥤", n:"Little League Concessions", f:"Hot dogs, flat soda, folding tables.", c:15,        r:0.12,     g:1.130},
+ {id:"hs", e:"🏈", n:"Friday Night Lights",       f:"A high school town that lives for Fridays.", c:165,  r:1.0,      g:1.135},
+ {id:"jh", e:"🏒", n:"Junior Hockey Club",        f:"Cold rinks, long bus rides, real crowds.", c:2e3,    r:8,        g:1.140},
+ {id:"mb", e:"⚾", n:"Minor League Baseball",      f:"Dollar dog night and a mascot with a cannon.", c:26e3, r:52,     g:1.140},
+ {id:"cb", e:"🏀", n:"College Hoops Program",      f:"A student section that travels.", c:340e3,          r:330,      g:1.145},
+ {id:"sc", e:"⚽", n:"Pro Soccer Club",            f:"Supporters' section, smoke, songs.", c:4.5e6,        r:2100,     g:1.145},
+ {id:"nh", e:"🥅", n:"Pro Hockey Franchise",       f:"Playoff beards and a very loud building.", c:62e6,   r:13500,    g:1.150},
+ {id:"nb", e:"🏟️", n:"Pro Basketball Franchise",   f:"Courtside seats cost more than cars.", c:860e6,      r:92e3,     g:1.150},
+ {id:"nf", e:"🏆", n:"Pro Football Franchise",     f:"Sunday is a national holiday now.", c:12e9,          r:660e3,    g:1.150},
+ {id:"f1", e:"🏎️", n:"Formula Racing Team",        f:"Carbon fibre, wind tunnels, jet lag.", c:180e9,      r:5e6,      g:1.155},
+ {id:"es", e:"🎮", n:"Global Esports League",      f:"Sold-out arenas for a video game.", c:2.8e12,        r:42e6,     g:1.155},
+ {id:"oy", e:"🔥", n:"Olympic Host Rights",        f:"You own the rings now. Somehow.", c:48e12,           r:380e6,    g:1.160}
+];
+const MILESTONES=[10,25,50,100,150,200,300,400,500,750,1000];
+
+/* per-division upgrades: unlock at an ownership count, multiply that division */
+const DIV_UP_TIERS=[
+ {at:5,   mult:2, costX:12,  label:"Better Equipment"},
+ {at:15,  mult:2, costX:60,  label:"Pro Staff"},
+ {at:40,  mult:3, costX:420, label:"Facility Rebuild"},
+ {at:80,  mult:3, costX:3600,label:"National TV Deal"},
+ {at:150, mult:4, costX:28e3,label:"Global Brand"}
+];
+function divUpgrades(){
+  const out=[];
+  DIVS.forEach(d=>DIV_UP_TIERS.forEach((t,i)=>{
+    out.push({id:d.id+"_u"+i,div:d.id,at:t.at,mult:t.mult,
+      cost:d.c*t.costX, name:`${d.n}: ${t.label}`, e:d.e,
+      desc:`×${t.mult} output from ${d.n}. Needs ${t.at}.`});
+  }));
+  return out;
+}
+
+/* global upgrades */
+const GLOBAL_UPS=[
+ {id:"g1", e:"📋", name:"Clipboard Culture",   cost:2e3,   mult:1.25, desc:"×1.25 to every division."},
+ {id:"g2", e:"📺", name:"Local Broadcast",     cost:45e3,  mult:1.25, desc:"×1.25 to every division."},
+ {id:"g3", e:"🧢", name:"Merch Empire",        cost:1.2e6,  mult:1.4,  desc:"×1.4 to every division."},
+ {id:"g4", e:"🍔", name:"Concession Monopoly", cost:28e6,   mult:1.4,  desc:"×1.4 to every division."},
+ {id:"g5", e:"💺", name:"Premium Seating",     cost:620e6,  mult:1.5,  desc:"×1.5 to every division."},
+ {id:"g6", e:"📡", name:"Streaming Rights",    cost:14e9,   mult:1.6,  desc:"×1.6 to every division."},
+ {id:"g7", e:"🌍", name:"International Tours", cost:300e9,  mult:1.75, desc:"×1.75 to every division."},
+ {id:"g8", e:"🛰️", name:"Satellite Network",   cost:7e12,   mult:2,    desc:"×2 to every division."},
+ {id:"g9", e:"🧬", name:"Sports Science Lab",  cost:150e12, mult:2.2,  desc:"×2.2 to every division."},
+ {id:"g10",e:"👑", name:"Commissioner's Seat", cost:4e15,   mult:2.5,  desc:"×2.5 to every division."}
+];
+/* click upgrades */
+const CLICK_UPS=[
+ {id:"c1", e:"🎟️", name:"Turnstile Crew",   cost:800,   mult:3, desc:"×3 from working the gate."},
+ {id:"c2", e:"🎤", name:"Hype Announcer",   cost:120e3, mult:4, desc:"×4 from working the gate."},
+ {id:"c3", e:"🎆", name:"Halftime Show",    cost:40e6,  mult:5, desc:"×5 from working the gate."},
+ {id:"c4", e:"🚁", name:"Flyover",          cost:9e9,   mult:8, desc:"×8 from working the gate."}
+];
+
+/* =====================================================
+   LEGACY — bought with Banners, survives every rebirth
+   ===================================================== */
+const LEGACY=[
+ {id:"l_scout", e:"🔭", name:"Scouting Network", cost:3,  desc:"+30% income, permanently."},
+ {id:"l_tix",   e:"🎫", name:"Season Tickets",   cost:6,  desc:"Offline earnings cap goes from 8 hours to 24."},
+ {id:"l_mom",   e:"⚡", name:"Momentum",          cost:10, desc:"Working the gate pays 10 seconds of income instead of 1."},
+ {id:"l_an",    e:"📊", name:"Analytics Dept",   cost:18, desc:"Every division costs 20% less."},
+ {id:"l_acad",  e:"🎓", name:"Youth Academy",    cost:28, desc:"+2% income for every achievement earned."},
+ {id:"l_brand", e:"💎", name:"Dynasty Branding", cost:45, desc:"Double all income."},
+ {id:"l_seed",  e:"🏦", name:"Seed Capital",     cost:60, desc:"Start each rebirth with $10M."},
+ {id:"l_comp",  e:"📈", name:"Compound Interest",cost:120,desc:"+1% income for every banner you have ever earned."},
+ {id:"l_auto",  e:"🤖", name:"Front Office AI",  cost:200,desc:"Triple all income."}
+];
+
+/* =====================================================
+   ACHIEVEMENTS — each one is +1% global income
+   ===================================================== */
+function buildAchievements(){
+  const a=[];
+  [[1e3,"First Thousand","🪙"],[1e6,"Millionaire","💵"],[1e9,"Billionaire","💰"],
+   [1e12,"Trillionaire","🏦"],[1e15,"Quadrillionaire","🌐"],[1e18,"Obscene","🪐"]]
+   .forEach(([v,n,e])=>a.push({id:"e_"+v,e,name:n,desc:`Earn ${money(v)} in total.`,
+     test:S=>S.lifetime>=v}));
+  DIVS.forEach(d=>{
+    [10,50,150].forEach(k=>a.push({id:`d_${d.id}_${k}`,e:d.e,name:`${d.n} ×${k}`,
+      desc:`Own ${k} of ${d.n}.`,test:S=>(S.own[d.id]||0)>=k}));
+  });
+  [[1,"Start Again","🔁"],[5,"Serial Owner","🔂"],[15,"Dynasty","👑"],[40,"Immortal","🗿"]]
+   .forEach(([v,n,e])=>a.push({id:"p_"+v,e,name:n,desc:`Rebirth ${v} time${v>1?"s":""}.`,
+     test:S=>S.rebirths>=v}));
+  [[100,"Hands On","👋"],[2500,"Grinder","💪"],[25000,"Turnstile Legend","🎟️"]]
+   .forEach(([v,n,e])=>a.push({id:"c_"+v,e,name:n,desc:`Work the gate ${fmt(v,0)} times.`,
+     test:S=>S.clicks>=v}));
+  a.push({id:"all12",e:"🌟",name:"Full Portfolio",desc:"Own at least one of all twelve divisions.",
+    test:S=>DIVS.every(d=>(S.own[d.id]||0)>0)});
+  a.push({id:"mps",e:"🚀",name:"Money Printer",desc:"Reach $1B per second.",
+    test:S=>incomePerSec()>=1e9});
+  a.push({id:"leg3",e:"📜",name:"Legacy Builder",desc:"Buy three legacy upgrades.",
+    test:S=>S.legacy.length>=3});
+  a.push({id:"legall",e:"🏛️",name:"Hall of Fame",desc:"Buy every legacy upgrade.",
+    test:S=>S.legacy.length>=LEGACY.length});
+  return a;
+}
+
+/* =====================================================
+   STATE
+   ===================================================== */
+let S=null;
+const DIVUPS=divUpgrades();
+let ACH=[];
+
+function freshState(keep){
+  const base={
+    money:0, lifetime:0, runEarned:0, clicks:0, started:now(), lastTick:now(),
+    own:{}, ups:[], rebirths:0, banners:0, bannersEarned:0, legacy:[], ach:[],
+    bestRun:0, totalTime:0, v:1
+  };
+  if(keep){
+    base.rebirths=keep.rebirths; base.banners=keep.banners;
+    base.bannersEarned=keep.bannersEarned; base.legacy=keep.legacy.slice();
+    base.ach=keep.ach.slice(); base.lifetime=keep.lifetime;
+    base.clicks=keep.clicks; base.bestRun=keep.bestRun; base.started=keep.started;
+    base.totalTime=keep.totalTime;
+    if(base.legacy.includes("l_seed"))base.money=1e7;
+  }
+  return base;
+}
+const hasLeg=id=>S&&S.legacy.includes(id);
+const ownCount=id=>S.own[id]||0;
+const bought=id=>S.ups.includes(id);
+
+/* ---------- multipliers ---------- */
+function milestoneMult(id){
+  const c=ownCount(id);let m=1;
+  MILESTONES.forEach(k=>{if(c>=k)m*=2;});
+  return m;
+}
+function divMult(id){
+  let m=milestoneMult(id);
+  DIVUPS.filter(u=>u.div===id&&bought(u.id)).forEach(u=>m*=u.mult);
+  return m;
+}
+function globalMult(){
+  let m=1;
+  GLOBAL_UPS.forEach(u=>{if(bought(u.id))m*=u.mult;});
+  m*=1+S.bannersEarned*0.02;                      // every banner ever earned
+  m*=1+S.ach.length*0.01;                         // every achievement
+  if(hasLeg("l_scout"))m*=1.3;
+  if(hasLeg("l_brand"))m*=2;
+  if(hasLeg("l_auto"))m*=3;
+  if(hasLeg("l_acad"))m*=1+S.ach.length*0.02;
+  if(hasLeg("l_comp"))m*=1+S.bannersEarned*0.01;
+  return m;
+}
+function divIncome(id){
+  const d=DIVS.find(x=>x.id===id);
+  return ownCount(id)*d.r*divMult(id)*globalMult();
+}
+function incomePerSec(){return DIVS.reduce((a,d)=>a+divIncome(d.id),0);}
+function clickValue(){
+  let base=Math.max(1,incomePerSec()*(hasLeg("l_mom")?10:1));
+  CLICK_UPS.forEach(u=>{if(bought(u.id))base*=u.mult;});
+  return base;
+}
+
+/* ---------- costs ---------- */
+function divCost(id,qty){
+  const d=DIVS.find(x=>x.id===id),c=ownCount(id);
+  const disc=hasLeg("l_an")?0.8:1;
+  let total=0;
+  for(let i=0;i<qty;i++)total+=d.c*Math.pow(d.g,c+i);
+  return total*disc;
+}
+function maxAffordable(id){
+  const d=DIVS.find(x=>x.id===id),c=ownCount(id);
+  const disc=hasLeg("l_an")?0.8:1;
+  let total=0,n=0;
+  while(n<10000){
+    const next=d.c*Math.pow(d.g,c+n)*disc;
+    if(total+next>S.money)break;
+    total+=next;n++;
+  }
+  return n;
+}
+function buyDiv(id,qty){
+  const n=qty==="max"?maxAffordable(id):qty;
+  if(n<=0)return 0;
+  const cost=divCost(id,n);
+  if(cost>S.money)return 0;
+  S.money-=cost; S.own[id]=ownCount(id)+n;
+  return n;
+}
+function divUnlocked(i){
+  if(i===0)return true;
+  return ownCount(DIVS[i-1].id)>=1;
+}
+
+/* ---------- upgrades ---------- */
+function allUpgrades(){return [...GLOBAL_UPS,...CLICK_UPS,...DIVUPS];}
+function upAvailable(u){
+  if(bought(u.id))return false;
+  if(u.div)return ownCount(u.div)>=u.at;
+  return true;
+}
+function buyUp(id){
+  const u=allUpgrades().find(x=>x.id===id);
+  if(!u||bought(id)||!upAvailable(u)||S.money<u.cost)return false;
+  S.money-=u.cost;S.ups.push(id);return true;
+}
+
+/* ---------- rebirth ---------- */
+/* Cube root keeps the curve from running away: the first banner lands around
+   $200B lifetime, ten banners needs 1,000x that, a hundred needs a million
+   times. Long sessions still accumulate, but legacy upgrades stay meaningful
+   rather than being handed out by the thousand. */
+function bannersFor(lifetime){
+  return Math.floor(Math.cbrt(Math.max(0,lifetime)/2e11));
+}
+function pendingBanners(){
+  return Math.max(0,bannersFor(S.lifetime)-S.bannersEarned);
+}
+function canRebirth(){return pendingBanners()>0;}
+function doRebirth(){
+  const gain=pendingBanners();
+  if(gain<=0)return 0;
+  const keep={rebirths:S.rebirths+1,banners:S.banners+gain,
+    bannersEarned:S.bannersEarned+gain,legacy:S.legacy,ach:S.ach,
+    lifetime:S.lifetime,clicks:S.clicks,
+    bestRun:Math.max(S.bestRun,S.runEarned),started:S.started,
+    totalTime:S.totalTime+(now()-S.lastTick)};
+  S=freshState(keep);
+  return gain;
+}
+function buyLegacy(id){
+  const l=LEGACY.find(x=>x.id===id);
+  if(!l||S.legacy.includes(id)||S.banners<l.cost)return false;
+  S.banners-=l.cost;S.legacy.push(id);return true;
+}
+
+/* ---------- achievements ---------- */
+function checkAch(){
+  const got=[];
+  ACH.forEach(a=>{
+    if(S.ach.includes(a.id))return;
+    let ok=false;try{ok=a.test(S);}catch(e){ok=false;}
+    if(ok){S.ach.push(a.id);got.push(a);}
+  });
+  return got;
+}
+
+/* ---------- the tick ---------- */
+let earnHistory=[];
+function earn(amount){
+  S.money+=amount;S.lifetime+=amount;S.runEarned+=amount;
+}
+function tick(dtSec){
+  const inc=incomePerSec();
+  earn(inc*dtSec);
+  earnHistory.push(inc);
+  if(earnHistory.length>80)earnHistory.shift();
+  return inc;
+}
+/* Offline progress, capped. Season Tickets raises the cap. */
+function applyOffline(){
+  const cap=(hasLeg("l_tix")?24:8)*3600*1000;
+  const elapsed=clamp(now()-S.lastTick,0,cap);
+  S.lastTick=now();
+  if(elapsed<30000)return 0;
+  const gained=incomePerSec()*(elapsed/1000)*0.5;   // offline earns at half rate
+  earn(gained);
+  return {ms:elapsed,amount:gained};
+}
+
+/* =====================================================
+   SAVE / LOAD
+   ===================================================== */
+const memStore={_m:{},async get(k){if(!(k in this._m))throw new Error("empty");return{key:k,value:this._m[k]};},
+  async set(k,v){this._m[k]=v;return{key:k,value:v};},async delete(k){delete this._m[k];return true;}};
+const store=(typeof window!=="undefined"&&window.storage)?window.storage:memStore;
+const KEY="se:main";
+
+function saveGame(){
+  if(!S)return Promise.resolve(false);
+  S.lastTick=now();
+  try{
+    return store.set(KEY,JSON.stringify(S)).then(()=>true)
+      .catch(e=>{console.error("[sports-empire] save failed",e);return false;});
+  }catch(e){console.error("[sports-empire] save threw",e);return Promise.resolve(false);}
+}
+async function saveNow(){
+  const el=document.getElementById("savemsg");
+  const show=(t,ok)=>{if(!el)return;el.textContent=t;el.style.color=ok?"":"#F0736A";
+    setTimeout(()=>{el.textContent="";el.style.color="";},ok?2200:6000);};
+  if(el){el.textContent="Saving...";el.style.color="";}
+  await saveGame();
+  const st=window.__vdSaveStatus?window.__vdSaveStatus():null;
+  if(st&&st.account)show("Saved to your account.",true);
+  else if(st&&st.local)show("Saved on this device.",true);
+  else show("Save failed"+(st&&st.error?": "+st.error:"."),false);
+}
+async function loadGame(){
+  try{
+    const r=await store.get(KEY);
+    const d=JSON.parse(r.value);
+    S=Object.assign(freshState(),d);
+    S.own=S.own||{};S.ups=S.ups||[];S.legacy=S.legacy||[];S.ach=S.ach||[];
+    return true;
+  }catch(e){ S=freshState(); return false; }
+}
+async function hardReset(){
+  if(UI.resetArm!==2){UI.resetArm=(UI.resetArm||0)+1;render();return;}
+  try{await store.delete(KEY);}catch(e){console.error("[sports-empire] delete failed",e);}
+  S=freshState();UI.resetArm=0;earnHistory=[];render();
+}
+function exportSave(){
+  if(!S)return;
+  const blob=new Blob([JSON.stringify(S)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=`sports-empire-${new Date().toISOString().slice(0,10)}.json`;a.click();
+}
+
+/* =====================================================
+   UI STATE + EFFECTS
+   ===================================================== */
+let UI={tab:"empire",buyQty:1,resetArm:0,newAch:0,offlineMsg:null};
+
+function toast(a){
+  const w=document.getElementById("toasts");if(!w)return;
+  const el=document.createElement("div");
+  el.className="toast";
+  el.innerHTML=`<div style="font-size:22px">${a.e}</div>
+    <div><div style="font-weight:700;font-size:13.5px">${esc(a.name)}</div>
+    <div class="xs dim">${esc(a.desc)} <span class="gold">+1% income</span></div></div>`;
+  w.appendChild(el);
+  setTimeout(()=>el.remove(),4600);
+}
+function floatGain(x,y,text){
+  const el=document.createElement("div");
+  el.className="float";el.style.left=(x-18)+"px";el.style.top=(y-14)+"px";
+  el.textContent=text;document.body.appendChild(el);
+  setTimeout(()=>el.remove(),1000);
+}
+function confetti(n){
+  const cols=["#FFC53D","#3DD6C4","#9B7BF0","#F58BB0","#5BD98A","#FFFFFF"];
+  for(let i=0;i<n;i++){
+    const c=document.createElement("div");
+    c.className="conf";
+    c.style.left=Math.random()*100+"vw";
+    c.style.background=cols[i%cols.length];
+    c.style.animationDuration=(1.6+Math.random()*1.8)+"s";
+    c.style.animationDelay=(Math.random()*0.45)+"s";
+    document.body.appendChild(c);
+    setTimeout(()=>c.remove(),3800);
+  }
+}
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+/* =====================================================
+   RENDER
+   ===================================================== */
+function render(){
+  document.getElementById("app").innerHTML=topBar()+nav()+`<div class="wrap">${body()}</div>`;
+}
+function topBar(){
+  return `<div class="top"><div class="topin">
+    <div class="brand">Sports Empire<small>Idle Sports Tycoon</small></div>
+    <div class="bank">
+      <div class="amt" id="bank">${money(S.money)}</div>
+      <div class="rate" id="rate">${money(incomePerSec())}/sec</div>
+    </div>
+  </div></div>`;
+}
+function nav(){
+  const avail=allUpgrades().filter(u=>upAvailable(u)&&S.money>=u.cost).length;
+  const legAvail=LEGACY.filter(l=>!S.legacy.includes(l.id)&&S.banners>=l.cost).length;
+  const tabs=[["empire","Empire",0],["upgrades","Upgrades",avail],
+    ["rebirth","Rebirth",legAvail+(canRebirth()?1:0)],
+    ["achievements","Achievements",0],["stats","Stats",0]];
+  return `<div class="nav">${tabs.map(([k,l,n])=>
+    `<button class="tab ${UI.tab===k?"on":""}" onclick="go('${k}')">${l}${n?`<span class="dotn">${n}</span>`:""}</button>`
+  ).join("")}</div>`;
+}
+function go(k){UI.tab=k;UI.resetArm=0;render();window.scrollTo(0,0);}
+function body(){
+  switch(UI.tab){
+    case "upgrades":return vUpgrades();
+    case "rebirth":return vRebirth();
+    case "achievements":return vAch();
+    case "stats":return vStats();
+    default:return vEmpire();
+  }
+}
+
+/* ---------------- empire ---------------- */
+function vEmpire(){
+  let h="";
+  if(UI.offlineMsg){
+    h+=`<div class="card" style="border-color:var(--gold2)">
+      <div class="card-t">While you were away<span class="rule"></span>
+      <button class="btn btn-g btn-sm" onclick="UI.offlineMsg=null;render()">Dismiss</button></div>
+      <p class="sm muted">Your empire ran for ${dur(UI.offlineMsg.ms)} and banked
+      <span class="gold mono">${money(UI.offlineMsg.amount)}</span>, at half the usual rate.
+      ${hasLeg("l_tix")?"":"Season Tickets in the rebirth shop raises the offline cap from 8 hours to 24."}</p></div>`;
+  }
+  h+=`<div class="card">
+    <button class="gate" onclick="workGate(event)">Work the Gate
+      <small>+${money(clickValue())} per click</small></button>
+    <div class="grid4 mt">
+      <div class="stat"><div class="k">Per second</div><div class="v teal">${money(incomePerSec())}</div></div>
+      <div class="stat"><div class="k">This run</div><div class="v">${money(S.runEarned)}</div></div>
+      <div class="stat"><div class="k">Banners</div><div class="v gold">${fmt(S.banners,0)}</div></div>
+      <div class="stat"><div class="k">Multiplier</div><div class="v">×${fmt(globalMult())}</div></div>
+    </div>
+    <svg class="spark mt" id="spark" viewBox="0 0 320 46" preserveAspectRatio="none"></svg>
+  </div>`;
+
+  h+=`<div class="card"><div class="card-t">Divisions<span class="rule"></span>
+    <span class="sm dim">buy</span>
+    ${[1,10,25,"max"].map(q=>`<span class="chip ${UI.buyQty===q?"on":""}" onclick="UI.buyQty=${typeof q==="string"?`'${q}'`:q};render()">${q==="max"?"Max":"×"+q}</span>`).join("")}
+  </div>`;
+  DIVS.forEach((d,i)=>{
+    const c=ownCount(d.id);
+    if(!divUnlocked(i)){
+      h+=`<div class="div locked"><div class="row">
+        <div class="emoji">🔒</div><div><div class="dname">${esc(d.n)}</div>
+        <div class="dsub">Buy one ${esc(DIVS[i-1].n)} to unlock.</div></div></div></div>`;
+      return;
+    }
+    const qty=UI.buyQty==="max"?Math.max(1,maxAffordable(d.id)):UI.buyQty;
+    const cost=divCost(d.id,qty);
+    const can=S.money>=cost&&(UI.buyQty!=="max"?true:maxAffordable(d.id)>0);
+    const nextMs=MILESTONES.find(m=>m>c)||null;
+    const prevMs=[...MILESTONES].reverse().find(m=>m<=c)||0;
+    const prog=nextMs?clamp((c-prevMs)/(nextMs-prevMs)*100,0,100):100;
+    h+=`<div class="div ${c>0?"owned":""}" id="div-${d.id}">
+      <div class="fill" id="fill-${d.id}"></div>
+      <div class="row">
+        <div class="emoji">${d.e}</div>
+        <div style="min-width:150px;flex:1">
+          <div class="dname">${esc(d.n)}</div>
+          <div class="dsub">${esc(d.f)}</div>
+          ${nextMs?`<div class="mstone">next bonus at ${nextMs} · ×${fmt(milestoneMult(d.id),0)} now</div>
+            <div class="mbar"><i style="width:${prog}%"></i></div>`
+            :`<div class="mstone gold">every milestone unlocked · ×${fmt(milestoneMult(d.id),0)}</div>`}
+        </div>
+        <div style="text-align:right">
+          <div class="dcount">${fmt(c,0)}</div>
+          <div class="dout">${money(divIncome(d.id))}/s</div>
+        </div>
+        <div class="dbuy">
+          <button class="btn ${can?"btn-p":"btn-g"} btn-sm" ${can?"":"disabled"}
+            onclick="doBuy('${d.id}')">Buy ${UI.buyQty==="max"?`×${fmt(Math.max(0,maxAffordable(d.id)),0)}`:"×"+qty}
+            <br><span style="font-family:'Chivo Mono';font-size:11px">${money(cost)}</span></button>
+        </div>
+      </div></div>`;
+  });
+  return h+`</div>`;
+}
+function doBuy(id){
+  const n=buyDiv(id,UI.buyQty);
+  if(n>0){flash(id);render();}
+}
+function flash(id){
+  const el=document.getElementById("div-"+id);
+  if(!el)return;
+  el.style.borderColor="var(--gold)";
+  setTimeout(()=>{if(el)el.style.borderColor="";},260);
+}
+function workGate(ev){
+  const v=clickValue();
+  earn(v);S.clicks++;
+  if(ev&&ev.clientX)floatGain(ev.clientX,ev.clientY,"+"+money(v));
+  const got=checkAch();got.forEach(toast);
+  paint();
+}
+
+/* ---------------- upgrades ---------------- */
+function vUpgrades(){
+  const mk=(u,kind)=>{
+    const has=bought(u.id),avail=upAvailable(u),can=avail&&S.money>=u.cost;
+    if(!has&&!avail)return "";
+    return `<div class="up ${has?"bought":can?"can":""}">
+      <div class="ui">${u.e||"⭐"}</div>
+      <div style="min-width:0"><div class="un">${esc(u.name)}</div>
+        <div class="ud">${esc(u.desc)}</div></div>
+      <div class="uc">${has?'<span class="pill pill-g">Owned</span>'
+        :`<button class="btn ${can?"btn-p":"btn-g"} btn-sm" ${can?"":"disabled"}
+            onclick="tryUp('${u.id}')">${money(u.cost)}</button>`}</div></div>`;
+  };
+  const locked=DIVUPS.filter(u=>!bought(u.id)&&!upAvailable(u));
+  return `<div class="card"><div class="card-t">Global<span class="rule"></span>
+      <span class="sm dim">multiplies everything you own</span></div>
+      ${GLOBAL_UPS.map(u=>mk(u)).join("")}</div>
+    <div class="card"><div class="card-t">Gate crew<span class="rule"></span>
+      <span class="sm dim">multiplies what clicking pays</span></div>
+      ${CLICK_UPS.map(u=>mk(u)).join("")}</div>
+    <div class="card"><div class="card-t">Division upgrades<span class="rule"></span>
+      <span class="sm dim">${DIVUPS.filter(u=>bought(u.id)).length}/${DIVUPS.length} owned</span></div>
+      ${DIVUPS.map(u=>mk(u)).join("")||'<div class="sm dim">Buy more divisions to unlock these.</div>'}
+      ${locked.length?`<div class="sm dim mt">${locked.length} more unlock as you grow each division.</div>`:""}
+    </div>`;
+}
+function tryUp(id){
+  if(buyUp(id)){const got=checkAch();got.forEach(toast);render();}
+}
+
+/* ---------------- rebirth ---------------- */
+function vRebirth(){
+  const pend=pendingBanners();
+  const next=Math.pow(S.bannersEarned+1,3)*2e11;
+  return `<div class="card">
+    <div class="card-t">Rebirth<span class="rule"></span></div>
+    <p class="sm muted">Sell the empire and start again. You lose your money, divisions and
+    upgrades. You keep every banner, every legacy upgrade and every achievement, and each
+    banner makes the next run permanently faster.</p>
+    <div class="grid3 mt">
+      <div class="stat"><div class="k">Banners waiting</div><div class="v gold">${fmt(pend,0)}</div></div>
+      <div class="stat"><div class="k">Banners earned, all time</div><div class="v">${fmt(S.bannersEarned,0)}</div></div>
+      <div class="stat"><div class="k">Rebirths</div><div class="v">${fmt(S.rebirths,0)}</div></div>
+    </div>
+    <p class="sm dim mt">Next banner at ${money(next)} lifetime earnings. You are at ${money(S.lifetime)}.</p>
+    <div class="mt">
+      <button class="btn ${pend>0?"btn-t":"btn-g"}" ${pend>0?"":"disabled"} onclick="tryRebirth()">
+        Rebirth for ${fmt(pend,0)} banner${pend===1?"":"s"}</button>
+    </div></div>
+
+    <div class="card"><div class="card-t">Legacy<span class="rule"></span>
+      <span class="gold mono">${fmt(S.banners,0)} banners</span></div>
+      <p class="sm dim" style="margin-top:-4px">Bought once. Survives every rebirth.</p>
+      ${LEGACY.map(l=>{
+        const has=S.legacy.includes(l.id),can=!has&&S.banners>=l.cost;
+        return `<div class="up ${has?"bought":can?"can":""}">
+          <div class="ui">${l.e}</div>
+          <div style="min-width:0"><div class="un">${esc(l.name)}</div><div class="ud">${esc(l.desc)}</div></div>
+          <div class="uc">${has?'<span class="pill pill-g">Owned</span>'
+            :`<button class="btn ${can?"btn-t":"btn-g"} btn-sm" ${can?"":"disabled"}
+               onclick="tryLegacy('${l.id}')">${l.cost} 🏴</button>`}</div></div>`;
+      }).join("")}
+    </div>`;
+}
+function tryRebirth(){
+  const g=doRebirth();
+  if(g>0){
+    confetti(90);earnHistory=[];
+    const got=checkAch();got.forEach(toast);
+    UI.tab="empire";saveGame();render();
+  }
+}
+function tryLegacy(id){
+  if(buyLegacy(id)){confetti(26);const got=checkAch();got.forEach(toast);render();}
+}
+
+/* ---------------- achievements ---------------- */
+function vAch(){
+  const got=S.ach.length;
+  return `<div class="card"><div class="card-t">Achievements<span class="rule"></span>
+      <span class="sm dim">${got}/${ACH.length} · +${got}% income</span></div>
+    <div class="grid3">${ACH.map(a=>{
+      const has=S.ach.includes(a.id);
+      return `<div class="ach ${has?"got":""}"><div class="ai">${a.e}</div>
+        <div style="min-width:0"><div class="sm" style="font-weight:600">${esc(a.name)}</div>
+        <div class="xs dim">${esc(a.desc)}</div></div></div>`;
+    }).join("")}</div></div>`;
+}
+
+/* ---------------- stats ---------------- */
+function vStats(){
+  const played=S.totalTime+(now()-S.started);
+  const rows=[
+    ["Money on hand",money(S.money)],
+    ["Income per second",money(incomePerSec())],
+    ["Per click",money(clickValue())],
+    ["Earned this run",money(S.runEarned)],
+    ["Best run",money(Math.max(S.bestRun,S.runEarned))],
+    ["Lifetime earnings",money(S.lifetime)],
+    ["Global multiplier","×"+fmt(globalMult())],
+    ["Divisions owned",fmt(DIVS.reduce((a,d)=>a+ownCount(d.id),0),0)],
+    ["Upgrades owned",`${S.ups.length}/${allUpgrades().length}`],
+    ["Gate clicks",fmt(S.clicks,0)],
+    ["Rebirths",fmt(S.rebirths,0)],
+    ["Banners earned",fmt(S.bannersEarned,0)],
+    ["Legacy upgrades",`${S.legacy.length}/${LEGACY.length}`],
+    ["Achievements",`${S.ach.length}/${ACH.length}`],
+    ["Time played",dur(played)]
+  ];
+  return `<div class="card"><div class="card-t">Stats<span class="rule"></span>
+      <span id="savemsg" class="sm good"></span></div>
+    <div class="grid2">${rows.map(([k,v])=>
+      `<div class="up"><div style="min-width:0"><div class="un">${k}</div></div>
+       <div class="uc mono gold">${v}</div></div>`).join("")}</div>
+    <div class="mt">
+      <button class="btn btn-p btn-sm" onclick="saveNow()">Save now</button>
+      <button class="btn btn-g btn-sm" style="margin-left:8px" onclick="exportSave()">Export</button>
+      <button class="btn ${UI.resetArm?"btn-danger":"btn-g"} btn-sm" style="margin-left:8px"
+        onclick="hardReset()">${UI.resetArm===0?"Wipe save":UI.resetArm===1?"Really wipe?":"Tap once more"}</button>
+    </div>
+    <p class="xs dim mt">Wiping clears everything including banners and achievements. There is no undo.</p>
+    </div>`;
+}
+
+/* =====================================================
+   LOOP
+   The money readout, rate, division bars and sparkline are
+   repainted in place every frame rather than re-rendering the
+   whole page, so numbers tick smoothly and buttons stay clickable.
+   ===================================================== */
+let lastPaintMoney=0;
+function paint(){
+  const b=document.getElementById("bank");
+  if(b){
+    b.textContent=money(S.money);
+    if(S.money>lastPaintMoney+0.0001){b.classList.remove("pop");void b.offsetWidth;b.classList.add("pop");}
+    lastPaintMoney=S.money;
+  }
+  const r=document.getElementById("rate");
+  if(r)r.textContent=money(incomePerSec())+"/sec";
+  if(UI.tab==="empire"){
+    const total=incomePerSec()||1;
+    DIVS.forEach(d=>{
+      const el=document.getElementById("fill-"+d.id);
+      if(el)el.style.width=(divIncome(d.id)/total*100)+"%";
+    });
+    drawSpark();
+  }
+}
+function drawSpark(){
+  const svg=document.getElementById("spark");if(!svg)return;
+  const n=earnHistory.length;
+  if(n<2){svg.innerHTML="";return;}
+  const max=Math.max(...earnHistory),min=Math.min(...earnHistory);
+  const span=Math.max(max-min,1e-9);
+  const pts=earnHistory.map((v,i)=>`${(i/(n-1)*320).toFixed(1)},${(44-((v-min)/span)*40).toFixed(1)}`).join(" ");
+  svg.innerHTML=
+    `<defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFC53D" stop-opacity=".45"/>
+      <stop offset="100%" stop-color="#FFC53D" stop-opacity="0"/></linearGradient></defs>
+    <polygon points="0,46 ${pts} 320,46" fill="url(#sg)"/>
+    <polyline points="${pts}" fill="none" stroke="#FFC53D" stroke-width="1.8" stroke-linejoin="round"/>`;
+}
+
+let acc=0, lastFrame=now(), lastSave=now(), lastRender=now();
+function loop(){
+  const t=now(),dt=Math.min((t-lastFrame)/1000,1);
+  lastFrame=t;
+  tick(dt);
+  paint();
+  const got=checkAch();
+  if(got.length){got.forEach(toast);lastRender=0;}
+  if(t-lastRender>1000){render();lastRender=t;}
+  if(t-lastSave>20000){saveGame();lastSave=t;}
+  requestAnimationFrame(loop);
+}
+
+(async function boot(){
+  ACH=buildAchievements();
+  await loadGame();
+  ACH=buildAchievements();
+  const off=applyOffline();
+  if(off&&off.amount>0)UI.offlineMsg=off;
+  render();
+  requestAnimationFrame(loop);
+  window.addEventListener("beforeunload",()=>{try{S.lastTick=now();store.set(KEY,JSON.stringify(S));}catch(e){}});
+})();
+
+</script>
+</body>
+</html>

@@ -33,6 +33,14 @@ const GAMES = [
     tag: 'Career sim',
   },
   {
+    slug: 'sports-empire',
+    name: 'Sports Empire',
+    kicker: 'Idle sports tycoon',
+    blurb:
+      'Start with a concession stand at little league and finish owning the Olympics. Twelve sports, seventy upgrades, fifty achievements and a rebirth system that makes every run faster than the last.',
+    tag: 'Idle',
+  },
+  {
     slug: 'gridiron-dynasty',
     name: 'Gridiron Dynasty',
     kicker: 'College football coach sim',
