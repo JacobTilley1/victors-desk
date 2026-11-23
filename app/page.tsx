@@ -11,6 +11,7 @@ import Avatar from '@/components/avatar';
 import EmptyState from '@/components/empty-state';
 import SubscribeForm from '@/components/subscribe-form';
 import ArchiveRail from '@/components/archive-rail';
+import ArcadeStrip from '@/components/games/arcade-strip';
 import { getPublishedPosts, getRecentThreads, getCommentCounts, getSiteStats, getMostRead } from '@/lib/queries';
 import { getProfile } from '@/lib/auth';
 import { TEAMS } from '@/lib/constants';
@@ -357,6 +358,9 @@ export default async function HomePage() {
           </aside>
         </div>
       </section>
+
+      {/* ---------------- ARCADE ---------------- */}
+      <ArcadeStrip />
 
       {/*
         Archive links from the home page.

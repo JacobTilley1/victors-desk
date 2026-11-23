@@ -3,6 +3,7 @@ import { createPublicClient } from '@/lib/supabase/public';
 import { SITE_URL } from '@/lib/constants';
 import { getAllHistoryEntryPaths } from '@/lib/history';
 import { getAllProPlayerPaths } from '@/lib/pro';
+import { GAMES } from '@/lib/games/catalog';
 import { getAllCoachPaths } from '@/lib/coaches';
 import { getAllResultPaths } from '@/lib/results';
 
@@ -53,13 +54,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/history/results`,        lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
     { url: `${SITE_URL}/pro`,        lastModified: now, changeFrequency: 'weekly',  priority: 0.8 },
     { url: `${SITE_URL}/games`,      lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
-    { url: `${SITE_URL}/games/hardwood-dynasty`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${SITE_URL}/games/gridiron-dynasty`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${SITE_URL}/games/sports-empire`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${SITE_URL}/games/split-the-uprights`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${SITE_URL}/games/keepers-nightmare`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${SITE_URL}/games/upper-deck`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${SITE_URL}/games/top-shelf`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
+    // Straight off the catalogue, so a new cabinet cannot be left out of here.
+    ...GAMES.filter((g) => g.kind !== 'daily').map((g) => ({
+      url: `${SITE_URL}/games/${g.slug}`,
+      lastModified: now,
+      changeFrequency: 'monthly' as const,
+      priority: 0.8,
+    })),
     // The daily game itself, not the archive — individual puzzle pages are
     // noindex on purpose, since hundreds of near-identical game screens are
     // exactly the thin-content pattern to stay away from.

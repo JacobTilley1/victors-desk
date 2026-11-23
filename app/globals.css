@@ -166,3 +166,80 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================
+   The arcade — /games and the home-page strip.
+   A deliberately different world from the rest of the site:
+   dark hall, glowing marquee, cabinets with real screens.
+   ============================================================ */
+
+.font-pixel {
+  font-family: var(--font-pixel), ui-monospace, "Cascadia Mono", Menlo, monospace;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+/* the hall itself: a dark floor under a pool of maize light */
+.arcade-hall {
+  background:
+    radial-gradient(ellipse 120% 70% at 50% -10%, rgba(255, 203, 5, 0.18), transparent 60%),
+    radial-gradient(ellipse 80% 50% at 15% 110%, rgba(0, 110, 200, 0.12), transparent 65%),
+    linear-gradient(#020610, #050d1c 40%, #03070f);
+}
+
+/* the carpet every arcade on earth seems to have */
+.arcade-carpet {
+  background-image:
+    radial-gradient(circle at 12% 22%, rgba(255, 203, 5, 0.09) 0 2px, transparent 3px),
+    radial-gradient(circle at 68% 58%, rgba(96, 165, 250, 0.08) 0 2px, transparent 3px),
+    radial-gradient(circle at 38% 82%, rgba(244, 114, 182, 0.05) 0 2px, transparent 3px);
+  background-size: 90px 90px, 130px 130px, 70px 70px;
+}
+
+/* scanlines, laid over a cabinet screen */
+.crt-lines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0 2px,
+    rgba(0, 0, 0, 0.26) 3px,
+    rgba(0, 0, 0, 0.26) 4px
+  );
+}
+/* the curve of the glass */
+.crt-glass {
+  background:
+    radial-gradient(ellipse 140% 100% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%),
+    linear-gradient(118deg, rgba(255, 255, 255, 0.11) 0 22%, transparent 42%);
+}
+
+/* the glow under the marquee lettering */
+.marquee-glow {
+  text-shadow:
+    0 0 6px rgba(255, 203, 5, 0.55),
+    0 0 22px rgba(255, 203, 5, 0.35),
+    0 3px 0 rgba(120, 90, 0, 0.9);
+}
+.neon-rule {
+  box-shadow: 0 0 10px rgba(255, 203, 5, 0.65), 0 0 28px rgba(255, 203, 5, 0.3);
+}
+
+/* INSERT COIN */
+@keyframes coin-blink { 0%, 58% { opacity: 1 } 59%, 100% { opacity: 0.16 } }
+.coin-blink { animation: coin-blink 1.5s steps(1, end) infinite; }
+
+/* the thumbnail is pixel art, so never let the browser smooth it */
+.pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* a cabinet lifts and its screen warms up when you go near it */
+.cabinet { transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease; }
+.cabinet:hover { transform: translateY(-6px); }
+.cabinet .screen-wash { transition: opacity .28s ease; }
+.cabinet:hover .screen-wash { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .coin-blink { animation: none; opacity: 1; }
+  .cabinet:hover { transform: none; }
+}
