@@ -65,6 +65,14 @@ const GAMES = [
     tag: 'Arcade · 2P',
   },
   {
+    slug: 'top-shelf',
+    name: 'Top Shelf',
+    kicker: 'Retro breakaway shootout',
+    blurb:
+      'Skate in alone and cut late to drag the goalie the wrong way — but a hard cut costs you the shot. Then three presses for the corner. Seven goaltenders and four modes, including a two-player shootout on one device.',
+    tag: 'Arcade · 2P',
+  },
+  {
     slug: 'gridiron-dynasty',
     name: 'Gridiron Dynasty',
     kicker: 'College football coach sim',

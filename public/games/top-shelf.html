@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>TOP SHELF</title>
+<style>
+/* ============================================================
+   TOP SHELF — a 320x180 pixel breakaway shootout.
+   One low-resolution canvas scaled up by a whole number.
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#05070c}
+body{
+  display:flex;align-items:center;justify-content:center;
+  font-family:ui-monospace,"Cascadia Mono","Segoe UI Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;
+  color:#cfd8ef;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:none;
+  user-select:none;-webkit-user-select:none;
+}
+#wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px}
+#cab{
+  position:relative;padding:10px;
+  background:linear-gradient(#152030,#0a0f18);
+  border:2px solid #2d4257;
+  box-shadow:0 0 0 2px #05070c, 0 16px 40px rgba(0,0,0,.65);
+}
+#cab::before{content:"";position:absolute;inset:4px;border:1px solid #223446;pointer-events:none}
+canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;background:#0b1020;cursor:pointer;touch-action:none}
+#scan{
+  position:absolute;inset:10px;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,
+    rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.16) 3px, rgba(0,0,0,.16) 4px);
+  mix-blend-mode:multiply;
+}
+body.flat #scan{display:none}
+
+#pad{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
+.key{
+  font:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  background:#16222f;color:#cfd8ef;border:2px solid #31495f;
+  padding:7px 12px;cursor:pointer;min-width:44px;
+}
+.key:active,.key.hot{background:#24455e;border-color:#9fe8ff;color:#9fe8ff}
+.key.wide{min-width:150px}
+#hint{font-size:10.5px;letter-spacing:.1em;color:#6d7f94;text-align:center;line-height:1.7;max-width:660px}
+#hint b{color:#a9bed1;font-weight:400}
+@media (max-width:640px){ #hint{display:none} }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="cab">
+    <canvas id="c" width="320" height="180"></canvas>
+    <div id="scan"></div>
+  </div>
+  <div id="pad">
+    <button class="key" id="kL" aria-label="Cut left">&#9664;</button>
+    <button class="key wide" id="kA">Shoot</button>
+    <button class="key" id="kR" aria-label="Cut right">&#9654;</button>
+    <button class="key" id="kM" title="Toggle the CRT filter">CRT</button>
+  </div>
+  <div id="hint">
+    <b>&#9664; &#9654;</b> or <b>A / D</b> steer as you come in. Whichever way you are cutting when you
+    shoot is your deke, and a hard cut drags him across &mdash; but it costs you shot power.<br>
+    Then <b>space</b> three times: stop the sweeping line for the side, stop it for the height, catch the notch to release.
+  </div>
+</div>
+<script>
+/* ============================================================
+   TOP SHELF — pixel toolkit
+   A hand-drawn 5x7 bitmap font and sprite blitter, so every
+   glyph and every limb is placed pixel by pixel.
+   ============================================================ */
+"use strict";
+
+var W = 320, H = 180;
+var CV = document.getElementById("c");
+var X = CV.getContext("2d", { alpha: false });
+X.imageSmoothingEnabled = false;
+
+/* ---------------- palette ---------------- */
+var P = {
+  sky1: "#2b4a8c", sky2: "#4a76bd", sky3: "#7aa5dd",
+  dusk1: "#2a1f4e", dusk2: "#6b3a62", dusk3: "#c46a52",
+  night1: "#070b1e", night2: "#101a3c", night3: "#1b2a55",
+  grass1: "#2f6b35", grass2: "#276029", grass3: "#3b7d41",
+  chalk: "#eef3e2", dirt: "#6a5436",
+  post: "#ffd447", postDark: "#c79a14",
+  stand: "#2a2f47", standLip: "#3d4466",
+  ink: "#0a0c16", white: "#f2f6ff", dim: "#8d9ac2",
+  red: "#e0483c", blue: "#3f6fd8", gold: "#ffd447",
+  green: "#5ad46a", orange: "#ff9a3c", ball: "#8b4a22", ballLace: "#f2f6ff"
+};
+
+/* ---------------- 5x7 bitmap font ----------------
+   Seven rows of five columns per glyph. Authored by hand so the
+   letterforms stay readable at one device pixel per cell.      */
+var FONT = {
+  "A": " ### /#   #/#   #/#####/#   #/#   #/#   #",
+  "B": "#### /#   #/#   #/#### /#   #/#   #/#### ",
+  "C": " ### /#   #/#    /#    /#    /#   #/ ### ",
+  "D": "#### /#   #/#   #/#   #/#   #/#   #/#### ",
+  "E": "#####/#    /#    /#### /#    /#    /#####",
+  "F": "#####/#    /#    /#### /#    /#    /#    ",
+  "G": " ### /#   #/#    /#  ##/#   #/#   #/ ####",
+  "H": "#   #/#   #/#   #/#####/#   #/#   #/#   #",
+  "I": "#####/  #  /  #  /  #  /  #  /  #  /#####",
+  "J": "    #/    #/    #/    #/    #/#   #/ ### ",
+  "K": "#   #/#  # /# #  /##   /# #  /#  # /#   #",
+  "L": "#    /#    /#    /#    /#    /#    /#####",
+  "M": "#   #/## ##/# # #/#   #/#   #/#   #/#   #",
+  "N": "#   #/##  #/# # #/#  ##/#   #/#   #/#   #",
+  "O": " ### /#   #/#   #/#   #/#   #/#   #/ ### ",
+  "P": "#### /#   #/#   #/#### /#    /#    /#    ",
+  "Q": " ### /#   #/#   #/#   #/# # #/#  # / ## #",
+  "R": "#### /#   #/#   #/#### /# #  /#  # /#   #",
+  "S": " ####/#    /#    / ### /    #/    #/#### ",
+  "T": "#####/  #  /  #  /  #  /  #  /  #  /  #  ",
+  "U": "#   #/#   #/#   #/#   #/#   #/#   #/ ### ",
+  "V": "#   #/#   #/#   #/#   #/#   #/ # # /  #  ",
+  "W": "#   #/#   #/#   #/#   #/# # #/## ##/#   #",
+  "X": "#   #/#   #/ # # /  #  / # # /#   #/#   #",
+  "Y": "#   #/#   #/ # # /  #  /  #  /  #  /  #  ",
+  "Z": "#####/    #/   # /  #  / #   /#    /#####",
+  "0": " ### /#   #/#  ##/# # #/##  #/#   #/ ### ",
+  "1": "  #  / ##  /  #  /  #  /  #  /  #  / ### ",
+  "2": " ### /#   #/    #/   # /  #  / #   /#####",
+  "3": "#####/   # /  #  /   # /    #/#   #/ ### ",
+  "4": "   # /  ## / # # /#  # /#####/   # /   # ",
+  "5": "#####/#    /#### /    #/    #/#   #/ ### ",
+  "6": "  ## / #   /#    /#### /#   #/#   #/ ### ",
+  "7": "#####/    #/   # /  #  / #   / #   / #   ",
+  "8": " ### /#   #/#   #/ ### /#   #/#   #/ ### ",
+  "9": " ### /#   #/#   #/ ####/    #/   # / ##  ",
+  " ": "     /     /     /     /     /     /     ",
+  ".": "     /     /     /     /     / ##  / ##  ",
+  ",": "     /     /     /     / ##  / ##  / #   ",
+  "!": "  #  /  #  /  #  /  #  /  #  /     /  #  ",
+  "?": " ### /#   #/    #/   # /  #  /     /  #  ",
+  "'": "  #  /  #  /     /     /     /     /     ",
+  "-": "     /     /     /#####/     /     /     ",
+  "+": "     /  #  /  #  /#####/  #  /  #  /     ",
+  ":": "     / ##  / ##  /     / ##  / ##  /     ",
+  "/": "    #/    #/   # /  #  / #   /#    /#    ",
+  "(": "   # /  #  / #   / #   / #   /  #  /   # ",
+  ")": " #   /  #  /   # /   # /   # /  #  / #   ",
+  "%": "#   #/#  # /  #  /  #  /  #  / #  #/#   #",
+  "&": " ##  /#  # /#  # / ##  /#  ##/#  # / ## #",
+  "=": "     /     /#####/     /#####/     /     ",
+  "*": "     /#   #/ # # /#####/ # # /#   #/     ",
+  "#": " # # /#####/ # # / # # /#####/ # # /     ",
+  "°": " ##  /#  # / ##  /     /     /     /     ",
+  "×": "     /#   #/ # # /  #  / # # /#   #/     ",
+  "↑": "  #  / ### /# # #/  #  /  #  /  #  /  #  ",
+  "↓": "  #  /  #  /  #  /# # #/ ### /  #  /     ",
+  "←": "     /  #  / #   /#####/ #   /  #  /     ",
+  "→": "     /  #  /   # /#####/   # /  #  /     ",
+  "▲": "     /  #  / ### /#####/     /     /     ",
+  "▼": "     /     /#####/ ### /  #  /     /     ",
+  "♥": "     / # # /#####/#####/ ### /  #  /     "
+};
+var GLYPH = {};
+(function compileFont() {
+  var ch;
+  for (ch in FONT) {
+    if (!Object.prototype.hasOwnProperty.call(FONT, ch)) continue;
+    GLYPH[ch] = FONT[ch].split("/").map(function (row) {
+      var bits = [];
+      for (var i = 0; i < 5; i++) bits.push(row.charAt(i) === "#");
+      return bits;
+    });
+  }
+})();
+
+function px(x, y, w, h, c) { X.fillStyle = c; X.fillRect(x | 0, y | 0, w | 0, h | 0); }
+function pxc(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
+
+/* Draw a string. s = pixel size, tracking = gap between glyphs. */
+function textAt(str, x, y, color, s, tracking, ctx) {
+  s = s || 1; tracking = tracking == null ? 1 : tracking;
+  var c = ctx || X;
+  var cx = x | 0, i, r, col;
+  str = String(str).toUpperCase();
+  c.fillStyle = color;
+  for (i = 0; i < str.length; i++) {
+    var g = GLYPH[str.charAt(i)];
+    if (!g) { cx += (5 + tracking) * s; continue; }
+    for (r = 0; r < 7; r++) for (col = 0; col < 5; col++) {
+      if (g[r][col]) c.fillRect(cx + col * s, (y | 0) + r * s, s, s);
+    }
+    cx += (5 + tracking) * s;
+  }
+  return cx - tracking * s;
+}
+function textWidth(str, s, tracking) {
+  s = s || 1; tracking = tracking == null ? 1 : tracking;
+  return String(str).length * (5 + tracking) * s - tracking * s;
+}
+function textCenter(str, cx, y, color, s, tracking, ctx) {
+  return textAt(str, Math.round(cx - textWidth(str, s, tracking) / 2), y, color, s, tracking, ctx);
+}
+/* Chunky drop-shadowed headline. */
+function textShadow(str, x, y, color, shadow, s, tracking) {
+  textAt(str, x + s, y + s, shadow, s, tracking);
+  textAt(str, x, y, color, s, tracking);
+}
+function textCenterShadow(str, cx, y, color, shadow, s, tracking) {
+  var x = Math.round(cx - textWidth(str, s, tracking) / 2);
+  textShadow(str, x, y, color, shadow, s, tracking);
+}
+
+/* ---------------- sprite blitter ----------------
+   Rows of characters; each character is a palette key.
+   "." is transparent.                                */
+/* As drawSprite, but the scale may be fractional: each cell is snapped to
+   whole pixels off its own edges, so the figure can grow smoothly with
+   the perspective without the blocks drifting apart. */
+function drawSpriteF(rows, x, y, pal, flip, scale, ctx) {
+  var c = ctx || X;
+  var h = rows.length, w = rows[0].length;
+  for (var r = 0; r < h; r++) {
+    var y0 = Math.round(y + r * scale), y1 = Math.round(y + (r + 1) * scale);
+    if (y1 <= y0) y1 = y0 + 1;
+    var row = rows[r];
+    for (var i = 0; i < w; i++) {
+      var col = pal[row.charAt(flip ? w - 1 - i : i)];
+      if (!col) continue;
+      var x0 = Math.round(x + i * scale), x1 = Math.round(x + (i + 1) * scale);
+      if (x1 <= x0) x1 = x0 + 1;
+      c.fillStyle = col;
+      c.fillRect(x0, y0, x1 - x0, y1 - y0);
+    }
+  }
+}
+
+function drawSprite(rows, x, y, pal, flip, scale, ctx) {
+  var c = ctx || X;
+  scale = scale || 1;
+  var h = rows.length, w = rows[0].length, r, i;
+  for (r = 0; r < h; r++) {
+    var row = rows[r];
+    for (i = 0; i < w; i++) {
+      var k = row.charAt(flip ? w - 1 - i : i);
+      var col = pal[k];
+      if (!col) continue;
+      c.fillStyle = col;
+      c.fillRect((x | 0) + i * scale, (y | 0) + r * scale, scale, scale);
+    }
+  }
+}
+
+/* ---------------- sweaters ---------------- */
+var KITS = [
+  { name: "RED",  shirt: "#d03a30", dark: "#8f251e", trim: "#f2f6ff", pants: "#1b1f2e", helm: "#d03a30", num: "#f2f6ff" },
+  { name: "BLUE", shirt: "#2f63c8", dark: "#1d3f86", trim: "#f2f6ff", pants: "#1b1f2e", helm: "#2f63c8", num: "#f2f6ff" }
+];
+var TEND_KIT = {
+  shirt: "#2a2f45", dark: "#191d2c", pad: "#e8ecf7", padEdge: "#9aa4ba",
+  glove: "#c8a02c", blocker: "#b8441f", mask: "#e8ecf7", maskDark: "#8f96ab",
+  stick: "#c89a4a", skin: "#c58b5c", blade: "#b9c1d6"
+};
+
+function kitPal(k) {
+  return {
+    ".": null, " ": null,
+    j: k.shirt, d: k.dark, t: k.trim, n: k.num,
+    p: k.pants, h: k.helm, s: "#c58b5c",
+    b: "#15171f",                     /* skate boot */
+    l: "#cfd8ef",                     /* skate blade */
+    w: "#c89a4a", g: "#5b4a2a"        /* stick shaft, blade */
+  };
+}
+function tendPal() {
+  return {
+    ".": null, " ": null,
+    j: TEND_KIT.shirt, d: TEND_KIT.dark,
+    P: TEND_KIT.pad, e: TEND_KIT.padEdge,
+    G: TEND_KIT.glove, B: TEND_KIT.blocker,
+    m: TEND_KIT.mask, M: TEND_KIT.maskDark,
+    w: TEND_KIT.stick, g: "#5b4a2a",
+    s: TEND_KIT.skin, b: "#15171f", l: TEND_KIT.blade
+  };
+}
+
+/* ---------------- the shooter ----------------
+   Seen from behind as he drives the net. 15 wide x 21 tall. */
+var SKATER = [
+  /* 0 — stride, right leg driving */
+  ["....hhhhh......", "...hhhhhhh.....", "...hhsssh......", "....ssss.......", "..jjjjjjjj.....",
+   ".jjjjjjjjjj....", ".jjjdnnddjj....", ".jjjdnnddjj....", ".jjjjjjjjjj....", "..jjjjjjjj.....",
+   "..pppppppp.....", "..ppp..ppp.....", ".ppp....ppp....", ".pp......pp....", "bbb.......bbb..",
+   "lll.......lll..", "...............", ".....wwww......", "........wwww...", "...........ggg.",
+   "..............."],
+  /* 1 — stride, weight shifted */
+  ["....hhhhh......", "...hhhhhhh.....", "...hhsssh......", "....ssss.......", "..jjjjjjjj.....",
+   ".jjjjjjjjjj....", ".jjjdnnddjj....", ".jjjdnnddjj....", ".jjjjjjjjjj....", "..jjjjjjjj.....",
+   "..pppppppp.....", "...pp..pp......", "...pp...ppp....", "..pp......pp...", ".bbb.......bbb.",
+   ".lll.......lll.", "...............", "....wwww.......", ".......wwww....", "..........ggg..",
+   "..............."],
+  /* 2 — cutting hard left, leaning over */
+  ["..hhhhh........", ".hhhhhhh.......", ".hhsssh........", "..ssss.........", "jjjjjjjj.......",
+   "jjjjjjjjjj.....", "jjjdnnddjj.....", "jjjdnnddjj.....", "jjjjjjjjj......", ".jjjjjjj.......",
+   ".ppppppp.......", ".pppp..pp......", "pppp....ppp....", "ppp.......pp...", "bbb........bbb.",
+   "lll........lll.", "...............", "..wwww.........", ".....wwww......", "........ggg....",
+   "..............."],
+  /* 3 — wind-up, stick back */
+  ["....hhhhh......", "...hhhhhhh.....", "...hhsssh......", "....ssss.......", "..jjjjjjjj.....",
+   ".jjjjjjjjjjw...", ".jjjdnnddjjw...", ".jjjdnnddjj.w..", ".jjjjjjjjjj.w..", "..jjjjjjjj...w.",
+   "..pppppppp...g.", "..ppp..ppp.....", ".ppp....ppp....", ".pp......pp....", "bbb.......bbb..",
+   "lll.......lll..", "...............", "...............", "...............", "...............",
+   "..............."],
+  /* 4 — follow-through, stick through the puck */
+  ["....hhhhh......", "...hhhhhhh.....", "...hhsssh......", "....ssss.......", "..jjjjjjjj.....",
+   ".jjjjjjjjjj....", ".jjjdnnddjj....", ".jjjdnnddjj....", ".jjjjjjjjjj....", "..jjjjjjjj.....",
+   "..pppppppp.....", "..ppp..ppp.....", ".ppp....ppp....", ".pp......pp....", "bbb.......bbb..",
+   "lll.......lll..", "..wwww.........", "......wwww.....", "..........ww...", "............gg.",
+   "..............."]
+];
+
+/* ---------------- the goaltender ----------------
+   Facing us, which is the whole problem. 17 wide x 16 tall. */
+var TEND_STANCE = [
+  ".......mmm.......", "......mMMMm......", "......mmmmm......", "....jjjjjjjjj....",
+  "...jjjjjjjjjjj...", "..GGjjjjjjjjjBB..", ".GGGjjjjjjjjjBBB.", ".GGGjjjjjjjjjBBB.",
+  "..GGjjjjjjjjjBB..", "...jjjjjjjjjjj...", "...PPPPeePPPPP...", "..PPPPPeePPPPPP..",
+  "..PPPPPeePPPPPP..", "..PPPPPeePPPPPP..", "..bbbb.ee.bbbb...", "..ll........ll..."
+];
+var TEND_SLIDE = [
+  "....mmm..........", "...mMMMm.........", "...mmmmm.........", ".jjjjjjjjj.......",
+  "jjjjjjjjjjj......", "GGjjjjjjjjjBB....", "GGGjjjjjjjjBBB...", "GGGjjjjjjjjBBB...",
+  "GGjjjjjjjjjBB....", ".jjjjjjjjjjj.....", "PPPPeePPPPPPP....", "PPPPeePPPPPPPP...",
+  "PPPPeePPPPPPPPP..", "PPPPeePPPPPPPPPP.", "bbb.ee.bbbb......", "ll............l.."
+];
+var TEND_BUTTERFLY = [
+  ".......mmm.......", "......mMMMm......", "......mmmmm......", ".....jjjjjjj.....",
+  "...GGjjjjjjjBB...", "..GGGjjjjjjjBBB..", "..GGGjjjjjjjBBB..", "...GGjjjjjjjBB...",
+  "....jjjjjjjjj....", "..PPPPPPeePPPPP..", ".PPPPPPPeePPPPPP.", "PPPPPPPPeePPPPPPP",
+  "PPPPPPPPeePPPPPPP", "PPPPPPPPeePPPPPPP", ".bb...........bb.", ".ll...........ll."
+];
+var TEND_GLOVE = [
+  "..G....mmm.......", ".GGG..mMMMm......", ".GGG..mmmmm......", "..G.jjjjjjjjj....",
+  "...jjjjjjjjjjj...", "...jjjjjjjjjjBB..", "...jjjjjjjjjjBBB.", "...jjjjjjjjjjBBB.",
+  "...jjjjjjjjjjBB..", "...jjjjjjjjjjj...", "...PPPPeePPPPP...", "..PPPPPeePPPPPP..",
+  "..PPPPPeePPPPPP..", "..PPPPPeePPPPPP..", "..bbbb.ee.bbbb...", "..ll........ll..."
+];
+var TEND_BLOCKER = [
+  ".......mmm....B..", "......mMMMm..BBB.", "......mmmmm..BBB.", "....jjjjjjjjj.B..",
+  "...jjjjjjjjjjj...", "..GGjjjjjjjjjj...", ".GGGjjjjjjjjjj...", ".GGGjjjjjjjjjj...",
+  "..GGjjjjjjjjjj...", "...jjjjjjjjjjj...", "...PPPPeePPPPP...", "..PPPPPeePPPPPP..",
+  "..PPPPPeePPPPPP..", "..PPPPPeePPPPPP..", "..bbbb.ee.bbbb...", "..ll........ll..."
+];
+var TEND_BEAT = [
+  ".....mmm.........", "....mMMMm........", "....mmmmm........", "...jjjjjjj.......",
+  "..GGjjjjjjj......", ".GGGjjjjjjjj.....", ".GGGjjjjjjjjB....", "..GGjjjjjjjjBB...",
+  "...jjjjjjjjjj....", "...PPPPeePPPPP...", "..PPPPPeePPPP....", "..PPPPPeePPP.....",
+  "...PPPPeePP......", "....bbb.ee.......", "....ll...........", "................."
+];
+
+/* ---------------- the puck ---------------- */
+var PUCK_BIG = ["..####..", ".######.", "########", "########", "########", ".######.", "..####..", "........"];
+var PUCK_MID = [".###.", "#####", "#####", "#####", ".###."];
+function puckPal() { return { ".": null, "#": "#15171f" }; }
+
+/* the goal lamp above the net */
+var LAMP_OFF = ["..###..", ".#####.", ".#####.", "..###..", "...#..."];
+/* A seeded value stream, so crowd layouts and gusts stay stable
+   within a kick instead of boiling between frames. */
+function hash32(n) {
+  n = (n ^ 61) ^ (n >>> 16); n = (n + (n << 3)) >>> 0;
+  n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d) >>> 0;
+  return (n ^ (n >>> 15)) >>> 0;
+}
+function rnd(seed) { return hash32(seed >>> 0) / 4294967296; }
+/* ============================================================
+   TOP SHELF — the rink
+   The goal line is z = 0 and the shooter comes at it from
+   negative z. Everything is yards.
+   ============================================================ */
+
+var NET_HALF = 1.0;          /* six feet between the posts */
+var CROSSBAR = 1.333;        /* four feet to the bar */
+var NET_DEPTH = 1.05;
+var POST_R = 0.055;
+var CREASE_R = 2.0;
+var END_BOARDS = 4.3;        /* behind the net */
+var SIDE_BOARDS = 14.2;
+var BOARD_H = 1.1;
+var GLASS_H = 2.95;
+var BLUE_LINE = -21.3;
+
+var FOCAL = 420, HORIZON = 58, CAMY = 1.35;
+var cam = { focal: FOCAL, horizon: HORIZON, camY: CAMY, camZ: -23.2, camX: 0 };
+
+function camFollow(sz, dt, rate) {
+  var want = sz - 5.2;
+  var k = Math.min(1, dt * (rate || 10));
+  cam.camZ += (want - cam.camZ) * k;
+}
+function camSetZ(sz) { cam.camZ = sz - 5.2; }
+function proj(x, y, z) {
+  var d = z - cam.camZ;
+  if (d < 0.6) d = 0.6;
+  var s = cam.focal / d;
+  return { x: 160 + (x - cam.camX) * s, y: cam.horizon - (y - cam.camY) * s, s: s };
+}
+
+/* ---------------- palette ---------------- */
+var ICE1 = "#e6eef8", ICE2 = "#d2dfee", ICE3 = "#c0d2e6";
+var RED = "#d33a34", BLUE = "#2f63c8";
+var CROWD_A = ["#4a3030", "#5c6484", "#2c3f66", "#5c5030", "#3a3028", "#454d6a"];
+var AD_COLS = ["#c0392b", "#1f6fd0", "#2f9e4f", "#d8a21c", "#8c3fb0", "#19989c"];
+
+function shade(hex, f) {
+  var n = parseInt(hex.slice(1), 16);
+  var r = Math.min(255, Math.round(((n >> 16) & 255) * f));
+  var g = Math.min(255, Math.round(((n >> 8) & 255) * f));
+  var b = Math.min(255, Math.round((n & 255) * f));
+  return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+
+/* ---------------- the bowl, the glass, the boards ----------------
+   Measured once per frame because the camera is always closing. */
+function drawArena(G) {
+  var i;
+  var board = proj(0, 0, END_BOARDS);
+  var bTop = proj(0, BOARD_H, END_BOARDS);
+  var gTop = proj(0, GLASS_H, END_BOARDS);
+  var yIce = Math.round(board.y), yBoardTop = Math.round(bTop.y), yGlass = Math.round(gTop.y);
+
+  /* roof and the dark upper reaches */
+  pxc(X, 0, 0, W, H, "#0b0f18");
+
+  /* The bowl: a lower deck, a ring of suites, then an upper deck in
+     shadow. An arena is dark everywhere the ice is not. */
+  var roof = Math.max(0, yGlass - 52);
+  var span = yBoardTop - roof;
+  var lower = Math.round(span * 0.46), ring = Math.max(3, Math.round(span * 0.14));
+  var n = 700;
+  for (i = 0; i < W; i++) {
+    for (var y = roof; y < yBoardTop; y++) {
+      n++;
+      if (y < 0 || y >= H) continue;
+      var up = yBoardTop - y;
+      if (up <= lower) {
+        if (up % 4 === 3) { pxc(X, i, y, 1, 1, "#12161f"); continue; }
+        if (rnd(n * 2654435761 + y * 97) < 0.26) { pxc(X, i, y, 1, 1, "#0d1019"); continue; }
+        pxc(X, i, y, 1, 1, CROWD_A[Math.floor(rnd(n * 40503 + 7) * CROWD_A.length)]);
+      } else if (up <= lower + ring) {
+        var lit = (i % 21 < 11) && up === lower + Math.max(1, Math.floor(ring / 2));
+        pxc(X, i, y, 1, 1, lit ? "#c8b070" : "#1a2130");
+      } else {
+        if (up % 4 === 1) { pxc(X, i, y, 1, 1, "#0b0e16"); continue; }
+        if (rnd(n * 2654435761 + y * 97) < 0.34) { pxc(X, i, y, 1, 1, "#080b12"); continue; }
+        pxc(X, i, y, 1, 1, shade(CROWD_A[Math.floor(rnd(n * 40503 + 7) * CROWD_A.length)], 0.62));
+      }
+    }
+  }
+  if (roof > 1) { pxc(X, 0, roof, W, 2, "#05070c"); pxc(X, 0, roof + 2, W, 1, "#161d2a"); }
+
+  /* the end scoreboard, hung high above the glass */
+  if (!G.hideBoard && yGlass - 32 > 24) {
+    var sw = 86, sh = 22, sx0 = 160 - sw / 2, sy0 = yGlass - 32 - sh;
+    pxc(X, sx0 - 2, sy0 - 2, sw + 4, sh + 4, "#070a12");
+    pxc(X, sx0, sy0, sw, sh, "#0d1220");
+    pxc(X, sx0, sy0, sw, 1, "#2c3448");
+    textAt("TOP SHELF", sx0 + 4, sy0 + 3, "#d8c07a", 1, 1);
+    textAt("SHOOTOUT", sx0 + 4, sy0 + 13, "#4a5468", 1, 1);
+    for (i = 0; i < 5; i++) pxc(X, sx0 + 58 + i * 5, sy0 + 13, 3, 5, i < 3 ? "#d33a34" : "#242b3c");
+    pxc(X, 160 - 1, Math.max(0, sy0 - 10), 2, 10, "#1a2030");
+  }
+
+  /* glass: you see the crowd through it, with a hard highlight */
+  if (yBoardTop > yGlass) {
+    X.globalAlpha = 0.14;
+    pxc(X, 0, yGlass, W, yBoardTop - yGlass, "#9fd0e8");
+    X.globalAlpha = 1;
+    for (i = 0; i < W; i += 46) {
+      pxc(X, i, yGlass, 1, yBoardTop - yGlass, "#56657e");          /* stanchions */
+    }
+    X.globalAlpha = 0.5;
+    for (i = 0; i < W; i += 46) pxc(X, i + 8, yGlass + 2, 2, Math.max(2, (yBoardTop - yGlass) - 6), "#eaf4ff");
+    X.globalAlpha = 1;
+    pxc(X, 0, yGlass, W, 1, "#8fa2bb");
+  }
+
+  /* dasher boards with ad panels and the yellow kickplate */
+  if (yIce > yBoardTop) {
+    var hgt = yIce - yBoardTop;
+    pxc(X, 0, yBoardTop, W, hgt, "#e8edf5");
+    for (i = 0; i < W; i += 38) {
+      var c = shade(AD_COLS[Math.floor(i / 38) % AD_COLS.length], 0.72);
+      pxc(X, i + 2, yBoardTop + Math.round(hgt * 0.3), 34, Math.max(2, Math.round(hgt * 0.4)), c);
+      pxc(X, i + 5, yBoardTop + Math.round(hgt * 0.42), 9, Math.max(1, Math.round(hgt * 0.14)), shade(c, 1.5));
+      pxc(X, i + 18, yBoardTop + Math.round(hgt * 0.42), 13, Math.max(1, Math.round(hgt * 0.14)), shade(c, 0.55));
+    }
+    pxc(X, 0, yIce - Math.max(1, Math.round(hgt * 0.18)), W, Math.max(1, Math.round(hgt * 0.18)), "#d8b23c");
+    pxc(X, 0, yBoardTop, W, 1, "#aab4c6");
+  }
+  return yIce;
+}
+
+/* ---------------- the ice ---------------- */
+function drawIce(G, yIce) {
+  var i, x;
+  /* the sheet, shading gradually toward the far boards */
+  var depth = Math.max(1, H - yIce);
+  pxc(X, 0, yIce, W, depth, ICE1);
+  var steps = 7;
+  for (var b = 0; b < steps; b++) {
+    var hh = Math.max(1, Math.round(depth * 0.40 / steps));
+    var f = 1 - b / steps;
+    pxc(X, 0, yIce + b * hh, W, hh, f > 0.72 ? ICE3 : f > 0.4 ? ICE2 : ICE1);
+  }
+
+  /* reflections of the lights, stretched down the sheet */
+  for (i = 0; i < 6; i++) {
+    var rx = 26 + i * 54;
+    X.globalAlpha = 0.16;
+    pxc(X, rx, yIce + 2, 7, Math.max(2, Math.round((H - yIce) * 0.5)), "#ffffff");
+    X.globalAlpha = 0.1;
+    pxc(X, rx - 3, yIce + 2, 13, Math.max(2, Math.round((H - yIce) * 0.3)), "#ffffff");
+    X.globalAlpha = 1;
+  }
+  /* skate scuffs */
+  for (i = 0; i < 46; i++) {
+    var sx = Math.floor(rnd(i * 7717 + 3) * W);
+    var sy = yIce + Math.floor(rnd(i * 1319 + 11) * Math.max(1, H - yIce));
+    pxc(X, sx, sy, 2 + Math.floor(rnd(i * 33 + 5) * 5), 1, "rgba(150,172,196,0.5)");
+  }
+
+  /* --- markings --- */
+  stripe(0, 0.0, 0.085, RED);                                   /* goal line */
+  /* blue line */
+  stripe(BLUE_LINE, 0.0, 0.5, BLUE);
+  /* the crease */
+  creaseArc(G);
+  /* face-off dots and circles in the zone */
+  spot(-7.3, -14.7); spot(7.3, -14.7);
+  circleOnIce(-7.3, -14.7, 5.0, RED);
+  circleOnIce(7.3, -14.7, 5.0, RED);
+  /* the trapezoid behind the net */
+  trapLine(-1.1, 0, -3.5, END_BOARDS - 0.2);
+  trapLine(1.1, 0, 3.5, END_BOARDS - 0.2);
+}
+
+/* a stripe across the sheet at a given z */
+function stripe(z, y, thick, col) {
+  var a = proj(-SIDE_BOARDS, y, z), b = proj(SIDE_BOARDS, y, z);
+  if (a.y < cam.horizon || a.y > H) return;
+  var t = Math.max(1, Math.round(thick * a.s));
+  var x0 = Math.max(0, Math.round(a.x)), x1 = Math.min(W, Math.round(b.x));
+  if (x1 <= x0) return;
+  pxc(X, x0, Math.round(a.y), x1 - x0, t, col);
+}
+function spot(x, z) {
+  if (z - cam.camZ < 1.1) return;
+  var p = proj(x, 0, z);
+  if (p.y < cam.horizon || p.y > H) return;
+  var r = Math.max(1, Math.round(0.33 * p.s));
+  pxc(X, Math.round(p.x - r), Math.round(p.y - r * 0.4), r * 2, Math.max(1, Math.round(r * 0.8)), RED);
+}
+/* Anything nearer than this is behind the shooter; proj clamps it instead
+   of dropping it, which smeared the far face-off circles across the ice
+   as red scribbles once the camera had skated past them. */
+var NEAR_Z = 1.1;
+function circleOnIce(cx, cz, r, col) {
+  for (var a = 0; a < Math.PI * 2; a += 0.035) {
+    var z = cz + Math.sin(a) * r;
+    if (z - cam.camZ < NEAR_Z) continue;
+    var p = proj(cx + Math.cos(a) * r, 0, z);
+    if (p.y < cam.horizon + 1 || p.y > H) continue;
+    if (p.x < -4 || p.x > W + 4) continue;
+    pxc(X, Math.round(p.x), Math.round(p.y), Math.max(1, Math.round(0.1 * p.s)), 1, col);
+  }
+}
+function trapLine(x0, z0, x1, z1) {
+  for (var t = 0; t <= 1; t += 0.02) {
+    var z = z0 + (z1 - z0) * t;
+    if (z - cam.camZ < NEAR_Z) continue;
+    var p = proj(x0 + (x1 - x0) * t, 0, z);
+    if (p.y < cam.horizon || p.y > H) continue;
+    /* a quieter red: it is a marking out at the boards, not the crease */
+    pxc(X, Math.round(p.x), Math.round(p.y), 1, 1, "rgba(196,64,64,0.55)");
+  }
+}
+/* The crease is eight feet across, not twelve: the six-foot arc is cut off
+   by a straight line down each side. Swinging the full half-circle sent it
+   flaring out to both edges of the screen like a pair of red whiskers. */
+var CREASE_HALF = 1.333;
+function creaseFront(x) {
+  var r2 = CREASE_R * CREASE_R - x * x;
+  return -Math.sqrt(r2 > 0 ? r2 : 0);
+}
+function creaseArc(G) {
+  /* paint it blue first — at this angle a bare red line reads as a scratch */
+  var steps = 72;
+  for (var i = 0; i <= steps; i++) {
+    var cx = -CREASE_HALF + (2 * CREASE_HALF) * (i / steps);
+    var edge = proj(cx, 0, creaseFront(cx));
+    var backp = proj(cx, 0, 0);
+    if (edge.y < cam.horizon) continue;
+    var y0 = Math.round(Math.min(edge.y, backp.y)), y1 = Math.round(Math.max(edge.y, backp.y));
+    var wpx = Math.max(2, Math.round(2 * CREASE_HALF * edge.s / steps) + 1);
+    if (y1 > y0) {
+      pxc(X, Math.round(edge.x), y0, wpx, y1 - y0, "#8fc2e8");
+      pxc(X, Math.round(edge.x), y0, wpx, Math.max(1, Math.round((y1 - y0) * 0.26)), "#a9d6f4");
+    }
+  }
+  /* the red outline: the arc, then the two short side lines to the goal line */
+  for (var j = 0; j <= steps; j++) {
+    var x = -CREASE_HALF + (2 * CREASE_HALF) * (j / steps);
+    var p = proj(x, 0, creaseFront(x));
+    if (p.y < cam.horizon || p.y > H) continue;
+    pxc(X, Math.round(p.x), Math.round(p.y), Math.max(1, Math.round(0.08 * p.s)), 1, RED);
+  }
+  for (var s = -1; s <= 1; s += 2) {
+    var z0 = creaseFront(CREASE_HALF);
+    for (var t = 0; t <= 1; t += 0.05) {
+      var q = proj(s * CREASE_HALF, 0, z0 + (0 - z0) * t);
+      if (q.y < cam.horizon || q.y > H) continue;
+      pxc(X, Math.round(q.x), Math.round(q.y), Math.max(1, Math.round(0.08 * q.s)), 1, RED);
+    }
+  }
+}
+
+/* ---------------- the net ---------------- */
+var netHits = [];
+function netHit(x, y, power) { netHits.push({ x: x, y: y, t: 0, amp: 0.26 + power * 0.26 }); if (netHits.length > 4) netHits.shift(); }
+function netReset() { netHits.length = 0; }
+function stepNet(dt) { for (var i = netHits.length - 1; i >= 0; i--) { netHits[i].t += dt; if (netHits[i].t > 2.2) netHits.splice(i, 1); } }
+function netPush(gx, gy) {
+  var p = 0;
+  for (var i = 0; i < netHits.length; i++) {
+    var hh = netHits[i];
+    var dx = gx - hh.x, dy = gy - hh.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    p += hh.amp * Math.exp(-dist * dist / 0.5) * Math.exp(-hh.t * 2.1) * (0.6 + 0.4 * Math.cos(dist * 5 - hh.t * 13));
+  }
+  return p;
+}
+function netPoint(gx, gy) { return proj(gx, gy, NET_DEPTH + netPush(gx, gy)); }
+
+function drawNet(G) {
+  /* Shade the mouth first. Without it the white pads vanish into the
+     ice behind and the goalie reads as a smudge. */
+  var tl = proj(-NET_HALF, CROSSBAR, NET_DEPTH * 0.5);
+  var br = proj(NET_HALF, 0, NET_DEPTH * 0.5);
+  var x0 = Math.round(tl.x), y0 = Math.round(tl.y);
+  var x1 = Math.round(br.x), y1 = Math.round(br.y);
+  if (x1 > x0 && y1 > y0) {
+    X.globalAlpha = 0.72;
+    pxc(X, x0, y0, x1 - x0, y1 - y0, "#1a2433");
+    X.globalAlpha = 0.3;
+    pxc(X, x0, y0, x1 - x0, Math.max(1, Math.round((y1 - y0) * 0.35)), "#0d1420");
+    X.globalAlpha = 1;
+  }
+  var col = "rgba(236,243,255,0.62)", deep = "rgba(190,206,228,0.3)";
+  var gx, gy, i;
+  for (gx = -NET_HALF; gx <= NET_HALF + 0.001; gx += 0.2) {
+    for (i = 0; i <= 16; i++) pxDot(netPoint(gx, (i / 16) * CROSSBAR), col);
+  }
+  for (gy = 0; gy <= CROSSBAR + 0.001; gy += 0.2) {
+    for (i = 0; i <= 26; i++) pxDot(netPoint(-NET_HALF + (i / 26) * NET_HALF * 2, gy), col);
+  }
+  for (var side = -1; side <= 1; side += 2) {
+    for (i = 0; i <= 6; i++) {
+      var t = i / 6;
+      for (var k = 0; k <= 8; k++)
+        pxDot(proj(side * NET_HALF, CROSSBAR * (1 - t * 0.42) * (k / 8), t * NET_DEPTH), deep);
+    }
+  }
+  for (i = 0; i <= 6; i++) {
+    var t2 = i / 6;
+    for (var m = 0; m <= 18; m++)
+      pxDot(proj(-NET_HALF + (m / 18) * NET_HALF * 2, CROSSBAR * (1 - t2 * 0.42), t2 * NET_DEPTH), deep);
+  }
+}
+function pxDot(p, col) {
+  if (p.y < 0 || p.y >= H || p.x < 0 || p.x >= W) return;
+  pxc(X, Math.round(p.x), Math.round(p.y), 1, 1, col);
+}
+
+function drawNetFrame() {
+  var base = proj(0, 0, 0);
+  var w = Math.max(2, Math.round(POST_R * 2 * base.s));
+  var bl = proj(-NET_HALF, 0, 0), tl = proj(-NET_HALF, CROSSBAR, 0);
+  var br = proj(NET_HALF, 0, 0), tr = proj(NET_HALF, CROSSBAR, 0);
+  function bar(x, y, ww, hh) {
+    pxc(X, Math.round(x) - 1, Math.round(y) - 1, Math.round(ww) + 2, Math.round(hh) + 2, "#5e1512");
+    pxc(X, Math.round(x), Math.round(y), Math.round(ww), Math.round(hh), RED);
+    pxc(X, Math.round(x), Math.round(y), Math.max(1, Math.round(ww * 0.34)), Math.round(hh), "#e8655c");
+  }
+  bar(tl.x - w / 2, tl.y, w, bl.y - tl.y);
+  bar(tr.x - w / 2, tr.y, w, br.y - tr.y);
+  bar(tl.x - w / 2, tl.y - w, (tr.x - tl.x) + w, w);
+  /* the skirt along the ice at the back of the cage */
+  var sl = proj(-NET_HALF, 0.1, NET_DEPTH), sr = proj(NET_HALF, 0.1, NET_DEPTH);
+  pxc(X, Math.round(sl.x), Math.round(sl.y), Math.max(2, Math.round(sr.x - sl.x)), Math.max(1, Math.round(w * 0.6)), "#8f2a24");
+}
+
+/* the lamp behind the glass, which is the whole point of the exercise */
+function drawLamp(G, on) {
+  var p = proj(0, GLASS_H + 0.5, END_BOARDS - 0.4);
+  if (p.y < 1 || p.y > H - 4) return;
+  var sc = Math.max(1, Math.round(p.s * 0.055));
+  if (sc > 4) sc = 4;
+  drawSprite(LAMP_OFF, Math.round(p.x) - 3 * sc, Math.round(p.y) - 4 * sc,
+    { ".": null, "#": on ? "#ff4a3a" : "#5a2420" }, false, sc);
+  if (on) {
+    X.globalAlpha = 0.34; pxc(X, Math.round(p.x) - 9 * sc, Math.round(p.y) - 8 * sc, 18 * sc, 14 * sc, "#ff4a3a");
+    X.globalAlpha = 0.05; pxc(X, 0, 0, W, H, "#ff4a3a");
+    X.globalAlpha = 1;
+  }
+}
+
+function drawRink(G) {
+  var yIce = drawArena(G);
+  drawIce(G, yIce);
+}
+/* ============================================================
+   TOP SHELF — the breakaway, the goalie, and the rules
+   ============================================================ */
+
+var START_Z = -17.5;
+/* Nineteen feet out. At eight feet the puck was on the goalie in seven
+   hundredths of a second, so his slide and his reaction time never got to
+   mean anything — every tier played the same. */
+var COMMIT_Z = -6.5;
+var SKATE_V = 7.4;            /* yards per second toward the net */
+var MAX_VX = 3.6;
+var SPREAD = 1.05;            /* yards off line at a full miss of the notch */
+
+/* ---------------- goaltenders ----------------
+   react    lag before he follows you across
+   slide    how fast he gets there
+   depth    how far out of his crease he plays
+   bw,bh    how much of the net his body and pads cover
+   read     how well he reads where you are going
+   recover  how quickly he squares up after biting on a deke  */
+var TENDERS = [
+  { name: "BEER LEAGUE", react: 0.180, slide: 2.6, depth: 0.30, bw: 0.44, bh: 0.82, read: 0.30, recover: 1.6 },
+  { name: "JUNIOR",      react: 0.165, slide: 3.1, depth: 0.45, bw: 0.46, bh: 0.86, read: 0.38, recover: 2.1 },
+  { name: "MINOR LEAGUE",react: 0.150, slide: 3.6, depth: 0.58, bw: 0.48, bh: 0.90, read: 0.45, recover: 2.6 },
+  { name: "STARTER",     react: 0.135, slide: 4.0, depth: 0.70, bw: 0.49, bh: 0.93, read: 0.52, recover: 3.1 },
+  { name: "ALL-STAR",    react: 0.120, slide: 4.4, depth: 0.80, bw: 0.50, bh: 0.96, read: 0.58, recover: 3.6 },
+  { name: "VEZINA",      react: 0.105, slide: 4.8, depth: 0.88, bw: 0.51, bh: 0.98, read: 0.64, recover: 4.1 },
+  { name: "WALL",        react: 0.090, slide: 5.2, depth: 0.95, bw: 0.52, bh: 1.00, read: 0.70, recover: 4.6 }
+];
+function tenderOf(G) { return TENDERS[Math.max(0, Math.min(TENDERS.length - 1, G.tier))]; }
+
+var SWEEP_X = NET_HALF + 0.42;
+var SWEEP_Y = CROSSBAR + 0.34;
+function sweepSpeed(G) { return 1.00 + G.tier * 0.13; }
+
+/* ---------------- persistence ---------------- */
+var SKEY = "best";
+var GAME = "top-shelf";
+var SAVE_API = "/api/games/saves";
+var store = (function () {
+  var LS = "ts:local:";
+  function lsGet(k) { try { return window.localStorage.getItem(LS + k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(LS + k, v); return true; } catch (e) { return false; } }
+  return {
+    account: null,
+    get: function (k) {
+      var local = lsGet(k);
+      if (typeof fetch !== "function") return Promise.resolve(local);
+      return fetch(SAVE_API + "?game=" + GAME + "&key=" + encodeURIComponent(k), { credentials: "same-origin" })
+        .then(function (r) {
+          if (r.status === 401) { store.account = false; return null; }
+          if (!r.ok) return null;
+          store.account = true; return r.json();
+        })
+        .then(function (j) {
+          var remote = j && j.value != null ? j.value : null;
+          if (remote) { lsSet(k, remote); return remote; }
+          return local;
+        })
+        .catch(function () { return local; });
+    },
+    set: function (k, v) {
+      lsSet(k, v);
+      if (typeof fetch !== "function") return Promise.resolve(true);
+      return fetch(SAVE_API, {
+        method: "PUT", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ game: GAME, key: k, value: v })
+      }).then(function (r) { if (r.status === 401) store.account = false; else store.account = r.ok; return true; })
+        .catch(function () { return true; });
+    }
+  };
+})();
+
+var BEST = {
+  gauntlet: { streak: 0, tier: 0, score: 0 },
+  lives: { score: 0, goals: 0 },
+  rush: { score: 0, goals: 0 },
+  shootout: { played: 0 }
+};
+function saveBest() { try { store.set(SKEY, JSON.stringify(BEST)); } catch (e) { } }
+function loadBest() {
+  return Promise.resolve(store.get(SKEY)).then(function (raw) {
+    if (!raw) return false;
+    try {
+      var o = JSON.parse(raw), m, k;
+      for (m in BEST) if (o[m]) for (k in BEST[m]) if (typeof o[m][k] === "number") BEST[m][k] = o[m][k];
+      return true;
+    } catch (e) { return false; }
+  }).catch(function () { return false; });
+}
+
+/* ---------------- modes ---------------- */
+var MODES = {
+  shootout: {
+    id: "shootout", name: "SHOOTOUT", players: 2,
+    line1: "TWO SHOOTERS, ONE DEVICE. FIVE EACH,",
+    line2: "THEN SUDDEN DEATH. PASS IT ALONG.",
+    start: function (G) { G.tier = 3; G.round = 1; G.turn = 0; G.sd = false; }
+  },
+  gauntlet: {
+    id: "gauntlet", name: "GAUNTLET", players: 1,
+    line1: "EVERY GOAL BRINGS A BETTER GOALIE.",
+    line2: "ONE SAVE AND THE RUN IS OVER.",
+    start: function (G) { G.tier = 0; G.lives = 1; }
+  },
+  lives: {
+    id: "lives", name: "THREE LIVES", players: 1,
+    line1: "THREE STOPS AND YOU ARE DONE.",
+    line2: "THE TOP CORNERS PAY THE MOST.",
+    start: function (G) { G.tier = 1; G.lives = 3; }
+  },
+  rush: {
+    id: "rush", name: "60 SECOND RUSH", players: 1,
+    line1: "GO AT HIM AS OFTEN AS YOU CAN.",
+    line2: "A GOAL BUYS TIME, A SAVE COSTS IT.",
+    start: function (G) { G.tier = 2; G.lives = 1; G.clock = 60; }
+  }
+};
+
+/* ---------------- state ---------------- */
+function newGame(mode) {
+  var G = {
+    mode: mode, phase: "skate", seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0,
+    tier: 0, lives: 1, clock: 0,
+    shots: 0, goals: 0, score: 0, streak: 0, bestStreak: 0,
+    sz: START_Z, sx: 0, svx: 0, power: 1, skateT: 0,
+    gx: 0, gvx: 0, gBite: 0, gRecover: 1,
+    aimX: 0, aimY: 0, sxp: -1, sxDir: 1, syp: 0, syDir: 1,
+    acc: 1, err: 0, deke: 0,
+    puck: null, shot: null, result: null, resultT: 0, anim: 0, flightT: 0,
+    shake: 0, flash: 0, lamp: 0, parts: [], trail: [], notice: null, noticeT: 0,
+    history: [],
+    players: null, turn: 0, round: 1, sd: false, pass: false, winner: -1
+  };
+  MODES[mode].start(G);
+  if (MODES[mode].players === 2) {
+    G.players = [
+      { name: "PLAYER 1", kit: 0, taken: [], goals: 0, history: [] },
+      { name: "PLAYER 2", kit: 1, taken: [], goals: 0, history: [] }
+    ];
+  }
+  return G;
+}
+function shooter(G) { return G.players ? G.players[G.turn] : null; }
+function shooterHistory(G) { return G.players ? G.players[G.turn].history : G.history; }
+
+/* ---------------- the skate in ---------------- */
+function stepSkate(G, dt) {
+  var T = tenderOf(G);
+  G.skateT += dt;
+  G.sz += SKATE_V * dt;
+  G.sx += G.svx * dt;
+  if (G.sx > 6.5) { G.sx = 6.5; G.svx = Math.min(0, G.svx); }
+  if (G.sx < -6.5) { G.sx = -6.5; G.svx = Math.max(0, G.svx); }
+
+  /* Cutting hard scrubs speed, so a big deke costs you the shot.
+     Driving straight keeps everything. */
+  var bleed = Math.abs(G.svx) / MAX_VX;
+  G.power = Math.max(0.5, 1 - bleed * 0.46);
+
+  /* he squares up to where you are, a beat behind */
+  var want = Math.max(-0.95, Math.min(0.95, G.sx * 0.30));
+  var lag = Math.min(1, dt / Math.max(0.03, T.react));
+  var prev = G.gx;
+  G.gx += (want - G.gx) * lag * 0.85;
+  var maxStep = T.slide * dt;
+  if (G.gx - prev > maxStep) G.gx = prev + maxStep;
+  if (G.gx - prev < -maxStep) G.gx = prev - maxStep;
+  G.gvx = (G.gx - prev) / Math.max(1e-4, dt);
+}
+
+/* How far off his line he is at the moment of the shot, and how open
+   the five-hole is because of it. */
+function commit(G) {
+  var T = tenderOf(G);
+  G.deke = G.svx;                       /* a late cut is the whole point */
+  /* he keeps going the way he was going for one reaction's worth */
+  G.gBite = G.gvx * T.react;
+  G.shotZ = G.sz;
+  G.shotX = G.sx;
+  G.phase = "aimx";
+  G.sxp = -1; G.sxDir = 1; G.syp = 0; G.syDir = 1;
+}
+
+/* ---------------- the shot ---------------- */
+function release(G) {
+  var T = tenderOf(G);
+  G.err = G.acc;
+  var spread = SPREAD * (1.35 - G.power * 0.5);
+  var landX = G.aimX + G.err * spread;
+  var landY = G.aimY + G.err * spread * 0.42 + Math.abs(G.err) * 0.1;
+
+  var speed = 22 + G.power * 16;        /* yards per second */
+  var dz = -G.shotZ;
+  var flight = dz / speed;
+
+  G.shot = { landX: landX, landY: landY, flight: flight, speed: speed, power: G.power };
+  G.puck = {
+    x: G.shotX, y: 0.05, z: G.shotZ,
+    vx: (landX - G.shotX) / flight,
+    vy: (landY - 0.05) / flight,
+    vz: speed,
+    t: 0, live: true, crossed: false
+  };
+  G.trail = [];
+  G.phase = "shot";
+  G.flightT = 0;
+  G.resolved = false;
+  decideTender(G, landX, landY, flight);
+}
+
+/* Where he ends up when the puck gets there. He is still carrying the
+   momentum of the deke, and he is reading your locked sights. */
+function decideTender(G, landX, landY, flight) {
+  var T = tenderOf(G);
+  var hist = shooterHistory(G);
+  var s = G.seed + G.shots * 104729;
+
+  var tell = G.aimX / NET_HALF;
+  var histX = 0;
+  if (hist.length) {
+    var sum = 0;
+    for (var i = 0; i < hist.length; i++) sum += hist[i].x;
+    histX = (sum / hist.length) / NET_HALF;
+  }
+  var hw = hist.length ? 0.28 + Math.min(0.22, hist.length * 0.045) : 0;
+  var nw = 0.34 + (1 - T.read) * 1.05;
+  var noise = rnd(s + 1) * 2 - 1;
+  var belief = T.read * ((1 - hw) * tell + hw * histX) + nw * noise;
+
+  /* his push across, limited by how long the puck is in the air */
+  var want = Math.max(-0.95, Math.min(0.95, belief * NET_HALF * 0.9));
+  var from = G.gx + G.gBite;                     /* where the deke left him */
+  var able = T.slide * Math.max(0, flight - T.react * 0.5);
+  var dx = want - from;
+  if (dx > able) dx = able;
+  if (dx < -able) dx = -able;
+  var endX = from + dx;
+
+  /* a goalie still sliding cannot close his legs */
+  var sliding = Math.abs(G.gBite) + Math.abs(dx);
+  /* A puck is three inches across, so a two-inch gap is no gap at all.
+     Shut he is genuinely shut; moving, the butterfly leaves a real lane. */
+  var fiveHole = Math.min(0.22, 0.03 + sliding * 0.30 / Math.max(0.3, T.recover * 0.30));
+
+  G.tender = {
+    x: endX, bite: G.gBite, slid: dx, fiveHole: fiveHole,
+    bw: T.bw * (1 + T.depth * 0.30 * (1 - Math.min(1, (-G.shotZ) / 9))),
+    bh: T.bh, T: T,
+    beaten: false, how: ""
+  };
+}
+
+function stepPuck(G, dt) {
+  var p = G.puck;
+  if (!p || !p.live) return;
+  p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+  p.t += dt;
+  if (!p.crossed && p.z >= 0) {
+    p.crossed = true;
+    p.hitX = G.shot.landX; p.hitY = G.shot.landY;
+    judge(G);
+    var r = G.pending;
+    if (r.goal) { netHit(r.x, Math.max(0.05, r.y), G.shot.power); p.vz *= 0.2; p.vx *= 0.25; p.vy = Math.abs(p.vy) * 0.2; }
+    else if (r.kind === "post") { p.vz *= -0.55; p.vx = (r.x < 0 ? -1 : 1) * 5; p.vy = 1.4; }
+    else { p.vz *= -0.5; p.vx = (rnd(G.seed + p.t * 1000) - 0.5) * 7; p.vy = 1.2; }
+  }
+  if (p.y <= 0.04 && p.vy < 0) { p.y = 0.04; p.vy = -p.vy * 0.35; p.vx *= 0.7; p.vz *= 0.7; }
+  p.vy -= 3.0 * dt;
+  if (p.t > 4) p.live = false;
+}
+
+/* ---------------- did it go in ---------------- */
+function judge(G) {
+  var t = G.tender;
+  var x = G.shot.landX, y = G.shot.landY;
+  var r = { kind: "", goal: false, x: x, y: y, how: "" };
+
+  var nearPost = Math.abs(Math.abs(x) - NET_HALF);
+  var nearBar = Math.abs(y - CROSSBAR);
+  /* Clear misses first. The iron is settled last, after the goalie: a puck
+     ringing in off the bar is still his to stop, and checking the woodwork
+     up front handed him a free pass on every shot aimed at a corner. */
+  if (Math.abs(x) > NET_HALF + POST_R) r.kind = x < 0 ? "wideleft" : "wideright";
+  else if (y > CROSSBAR + POST_R) r.kind = "over";
+  else if (y < 0) r.kind = "ice";
+
+  if (r.kind === "") {
+    var dx = x - t.x;
+    var inBody = Math.abs(dx) <= t.bw && y <= t.bh;
+    var inFive = Math.abs(dx) <= t.fiveHole && y <= 0.30;
+    /* Head and shoulders. Without this the lane straight over him was the
+       easiest goal in the game: beat him wide, then roof it down the middle. */
+    var shoulder = Math.abs(dx) <= t.bw * 0.62 && y > t.bh && y <= t.bh + 0.30;
+    /* The glove is the better hand, but only a little: at a third more
+       reach the blocker-side corner was the only shot in the game. */
+    var glove = dx < -t.bw * 0.4 && dx > -t.bw - 0.24 && y > t.bh && y <= t.bh + 0.30;
+    var blocker = dx > t.bw * 0.4 && dx < t.bw + 0.20 && y > t.bh && y <= t.bh + 0.26;
+
+    if (inFive && Math.abs(t.bite) + Math.abs(t.slid) > 0.07) { r.kind = "goal"; r.goal = true; r.how = "FIVE HOLE"; }
+    else if (inBody) { r.kind = "save"; r.how = y < 0.3 ? "PAD" : "CHEST"; }
+    else if (shoulder) { r.kind = "save"; r.how = "SHOULDER"; }
+    else if (glove) { r.kind = "save"; r.how = "GLOVE"; }
+    else if (blocker) { r.kind = "save"; r.how = "BLOCKER"; }
+    else {
+      r.kind = "goal"; r.goal = true;
+      if (y > t.bh + 0.2) r.how = "TOP SHELF";
+      else if (Math.abs(dx) > t.bw) r.how = Math.abs(x) > NET_HALF * 0.6 ? "SHORT SIDE" : "OPEN NET";
+      else r.how = "THROUGH HIM";
+    }
+  }
+  /* now the iron, for anything he did not stop */
+  if (r.kind === "goal" || (r.kind !== "save" && r.kind !== "")) {
+    var ringsPost = y > 0 && nearPost <= POST_R + 0.05 && y < CROSSBAR + POST_R;
+    var ringsBar = nearBar <= POST_R + 0.05 && Math.abs(x) < NET_HALF + POST_R;
+    if (ringsPost || ringsBar) {
+      var wentIn = Math.abs(x) < NET_HALF && y < CROSSBAR && r.kind === "goal";
+      r.kind = ringsPost ? "post" : "bar";
+      r.goal = wentIn;
+      r.woodwork = true;
+      if (wentIn) r.how = "OFF THE IRON";
+    }
+  }
+  t.beaten = r.goal;
+  t.how = r.how;
+  G.pending = r;
+  return r;
+}
+
+var RESULT_TEXT = {
+  goal: "GOAL!", save: "SAVE", wideleft: "WIDE", wideright: "WIDE",
+  over: "OVER THE BAR", ice: "INTO THE ICE",
+  post: "OFF THE POST", bar: "OFF THE BAR"
+};
+
+function settle(G) {
+  var r = G.pending || { kind: "save", goal: false, how: "PAD" };
+  var perfect = Math.abs(G.err) < 0.05;
+  var pts = 0, notes = [];
+
+  G.shots++;
+  shooterHistory(G).push({ x: r.x, y: r.y });
+  if (shooterHistory(G).length > 8) shooterHistory(G).shift();
+
+  if (r.goal) {
+    G.goals++;
+    G.streak++;
+    if (G.streak > G.bestStreak) G.bestStreak = G.streak;
+    var corner = (Math.abs(r.x) / NET_HALF) * 0.5 + (Math.max(0, r.y) / CROSSBAR) * 0.5;
+    pts = 250 + Math.round(corner * 550);
+    if (r.how === "FIVE HOLE") { pts += 350; notes.push("FIVE HOLE  +350"); }
+    if (r.how === "TOP SHELF") { pts += 300; notes.push("TOP SHELF  +300"); }
+    if (Math.abs(G.deke) > MAX_VX * 0.55) { pts += 300; notes.push("SOLD THE DEKE  +300"); }
+    if (perfect) { pts *= 2; notes.push("CLEAN RELEASE  x2"); }
+    if (r.woodwork) { pts += 400; notes.push("OFF THE IRON  +400"); }
+    if (G.streak > 1) { var sb = (G.streak - 1) * 70; pts += sb; notes.push("STREAK " + G.streak + "  +" + sb); }
+    G.score += pts;
+    G.lamp = 1;
+  } else {
+    G.streak = 0;
+  }
+
+  G.result = {
+    goal: r.goal, kind: r.kind, how: r.how,
+    text: r.goal ? "GOAL!" : (RESULT_TEXT[r.kind] || "SAVE"),
+    pts: pts, notes: notes, perfect: perfect, save: r.kind === "save", woodwork: !!r.woodwork,
+    mph: Math.round(G.shot.speed * 2.045)
+  };
+  G.resultT = 0;
+  G.phase = "result";
+  applyOutcome(G, r.goal);
+  return G.result;
+}
+
+function applyOutcome(G, scored) {
+  if (G.mode === "shootout") {
+    var p = G.players[G.turn];
+    p.taken.push(scored);
+    if (scored) p.goals++;
+    return;
+  }
+  if (G.mode === "gauntlet") {
+    if (scored) {
+      var was = G.tier;
+      G.tier = Math.min(TENDERS.length - 1, G.tier + 1);
+      if (was !== G.tier) G.notice = tenderOf(G).name + " IS IN";
+    } else G.lives = 0;
+    return;
+  }
+  if (G.mode === "lives") {
+    if (!scored) G.lives--;
+    else if (G.goals % 3 === 0) G.tier = Math.min(TENDERS.length - 1, G.tier + 1);
+    return;
+  }
+  if (G.mode === "rush") {
+    G.clock += scored ? 2 : -3;
+    if (G.clock > 75) G.clock = 75;
+    if (scored && G.goals % 4 === 0) G.tier = Math.min(TENDERS.length - 1, G.tier + 1);
+  }
+}
+
+/* ---------------- shootout bookkeeping ---------------- */
+function shootoutState(G) {
+  var a = G.players[0], b = G.players[1];
+  var ra = 5 - a.taken.length, rb = 5 - b.taken.length;
+  if (!G.sd) {
+    if (a.goals > b.goals + rb) return { over: true, winner: 0 };
+    if (b.goals > a.goals + ra) return { over: true, winner: 1 };
+    if (a.taken.length >= 5 && b.taken.length >= 5) {
+      if (a.goals !== b.goals) return { over: true, winner: a.goals > b.goals ? 0 : 1 };
+      return { over: false, suddenDeath: true };
+    }
+    return { over: false };
+  }
+  if (a.taken.length === b.taken.length && a.taken.length > 5) {
+    var la = a.taken[a.taken.length - 1], lb = b.taken[b.taken.length - 1];
+    if (la !== lb) return { over: true, winner: la ? 0 : 1 };
+  }
+  return { over: false };
+}
+function advanceShootout(G) {
+  var st = shootoutState(G);
+  if (st.suddenDeath) G.sd = true;
+  if (st.over) { G.winner = st.winner; return true; }
+  G.turn = G.turn === 0 ? 1 : 0;
+  G.round = Math.min(G.players[0].taken.length, G.players[1].taken.length) + 1;
+  G.pass = true;
+  return false;
+}
+
+function runOver(G) {
+  if (G.mode === "shootout") return G.winner >= 0;
+  if (G.mode === "rush") return G.clock <= 0;
+  return G.lives <= 0;
+}
+function recordBest(G) {
+  var improved = false;
+  if (G.mode === "gauntlet") {
+    if (G.bestStreak > BEST.gauntlet.streak) { BEST.gauntlet.streak = G.bestStreak; improved = true; }
+    if (G.tier > BEST.gauntlet.tier) { BEST.gauntlet.tier = G.tier; improved = true; }
+    if (G.score > BEST.gauntlet.score) { BEST.gauntlet.score = G.score; improved = true; }
+  } else if (G.mode === "shootout") { BEST.shootout.played++; improved = true; }
+  else {
+    var b = BEST[G.mode];
+    if (G.score > b.score) { b.score = G.score; improved = true; }
+    if (G.goals > b.goals) { b.goals = G.goals; improved = true; }
+  }
+  if (improved) saveBest();
+  return improved;
+}
+
+function nextRush(G) {
+  G.sz = START_Z; G.sx = 0; G.svx = 0; G.power = 1; G.skateT = 0;
+  G.gx = 0; G.gvx = 0; G.gBite = 0;
+  G.aimX = 0; G.aimY = 0; G.sxp = -1; G.sxDir = 1; G.syp = 0; G.syDir = 1;
+  G.acc = 1; G.err = 0; G.deke = 0;
+  G.puck = null; G.shot = null; G.tender = null; G.pending = null; G.result = null;
+  G.trail = []; G.resolved = false; G.settleT = null;
+  G.lamp = 0;
+  netReset();
+  camSetZ(G.sz);
+  G.phase = "skate";
+  G.anim = 0;
+}
+/* ============================================================
+   TOP SHELF — figures, interface, loop
+   ============================================================ */
+
+var PANEL_Y = 140;
+var HUD_H = 22;
+var UIst = { t: 0 };
+
+function tenderZ(G) { var T = tenderOf(G); return -(0.25 + T.depth * 1.15); }
+
+/* ---------------- the goaltender ---------------- */
+function drawTender(G) {
+  var T = tenderOf(G);
+  var gz = tenderZ(G);
+  var gx = G.tender ? G.tender.x : G.gx + G.gBite;
+  var foot = proj(gx, 0, gz);
+  /* Draw him exactly as big as the net he covers. The outer columns of
+     the sprite are the glove and the blocker, so the span is the body
+     plus the reach on either side; an integer scale made him swell to
+     fill the mouth at some distances and lied about where the net was
+     open. The fractional blitter keeps the blocks whole. */
+  var span = T.bw * 2 + 0.34;
+  var sc = Math.max(0.55, span * foot.s / 17);
+  var sprite = TEND_STANCE, flip = false;
+
+  if (G.phase === "skate" || G.phase === "aimx" || G.phase === "aimy" || G.phase === "release") {
+    if (Math.abs(G.gvx) > 0.5) { sprite = TEND_SLIDE; flip = G.gvx > 0; }
+  } else if (G.result) {
+    if (G.result.goal) sprite = TEND_BEAT;
+    else if (G.result.how === "GLOVE") sprite = TEND_GLOVE;
+    else if (G.result.how === "BLOCKER") sprite = TEND_BLOCKER;
+    else sprite = TEND_BUTTERFLY;
+    flip = G.result.goal && (G.tender && G.tender.bite > 0);
+  } else if (G.phase === "shot") {
+    if (Math.abs(G.tender ? G.tender.slid : 0) > 0.1) { sprite = TEND_SLIDE; flip = (G.tender.slid > 0); }
+    else sprite = TEND_BUTTERFLY;
+  }
+  var ox = foot.x - 8.5 * sc, oy = foot.y - 16 * sc;
+  /* a one-pixel silhouette behind him, so the white pads have an edge */
+  var outline = { ".": null, " ": null };
+  for (var kk in tendPal()) if (kk !== "." && kk !== " ") outline[kk] = "#070a12";
+  drawSpriteF(sprite, ox - 1, oy, outline, flip, sc);
+  drawSpriteF(sprite, ox + 1, oy, outline, flip, sc);
+  drawSpriteF(sprite, ox, oy - 1, outline, flip, sc);
+  drawSpriteF(sprite, ox, oy + 1, outline, flip, sc);
+  drawSpriteF(sprite, ox, oy, tendPal(), flip, sc);
+}
+
+/* ---------------- the shooter ---------------- */
+function drawShooter(G) {
+  if (G.phase === "result" && G.resultT > 1.1) return;
+  var kit = KITS[G.players ? G.players[G.turn].kit : 0];
+  var f = 0;
+  if (G.phase === "skate") {
+    if (Math.abs(G.svx) > MAX_VX * 0.45) f = 2;
+    else f = (Math.floor(G.anim * 7) % 2) ? 1 : 0;
+  } else if (G.phase === "aimx" || G.phase === "aimy") f = 3;
+  else f = 4;
+  /* Bottom left and cropped by the panel, so he frames the shot
+     instead of standing in front of the net. */
+  var sx = Math.round(14 + (G.sx - cam.camX) * 5);
+  var flip = f === 2 && G.svx > 0;
+  drawSprite(SKATER[f], sx, PANEL_Y - 48, kitPal(kit), flip, 3);
+  /* ice spray off the inside edge when he cuts */
+  if (G.phase === "skate" && Math.abs(G.svx) > MAX_VX * 0.4) {
+    for (var i = 0; i < 3; i++) {
+      var px0 = sx + (G.svx > 0 ? 4 : 38) + Math.floor(rnd(G.anim * 1000 + i) * 6);
+      pxc(X, px0, PANEL_Y - 6 - Math.floor(rnd(G.anim * 777 + i) * 5), 2, 2, "rgba(236,246,255,0.8)");
+    }
+  }
+}
+
+/* ---------------- the puck ---------------- */
+function drawPuck(G) {
+  var p = G.puck;
+  if (!p) {
+    if (G.phase === "skate" || G.phase === "aimx" || G.phase === "aimy" || G.phase === "release") {
+      var dp = proj(G.sx + (G.svx > 0 ? 0.55 : -0.55), 0.03, G.sz + 1.1);
+      var dsz = Math.max(2, Math.round(dp.s * 0.055));
+      pxc(X, Math.round(dp.x - dsz / 2), Math.round(dp.y - dsz / 2), dsz, Math.max(1, Math.round(dsz * 0.55)), "#15171f");
+    }
+    return;
+  }
+  var i;
+  for (i = 0; i < G.trail.length; i++) {
+    var t = G.trail[i], a = (i + 1) / G.trail.length;
+    var pt = proj(t.x, t.y, t.z);
+    if (pt.y < 0 || pt.y > H) continue;
+    X.globalAlpha = a * 0.5;
+    var ts = Math.max(1, Math.round(pt.s * 0.025));
+    pxc(X, Math.round(pt.x - ts / 2), Math.round(pt.y - ts / 2), ts, ts, "#6c7a90");
+    X.globalAlpha = 1;
+  }
+  var q = proj(p.x, p.y, p.z);
+  if (q.y < -12 || q.y > H + 12) return;
+  var size = Math.max(3, q.s * 0.07);
+  if (size >= 10) drawSprite(PUCK_BIG, Math.round(q.x - 8), Math.round(q.y - 6), puckPal(), false, 2);
+  else if (size >= 6) drawSprite(PUCK_BIG, Math.round(q.x - 4), Math.round(q.y - 3), puckPal(), false, 1);
+  else if (size >= 4) drawSprite(PUCK_MID, Math.round(q.x - 2.5), Math.round(q.y - 2), puckPal(), false, 1);
+  else {
+    var s2 = Math.max(3, Math.round(size));
+    pxc(X, Math.round(q.x - s2 / 2) - 1, Math.round(q.y - s2 / 2) - 1, s2 + 2, s2 + 1, "#e8eef8");
+    pxc(X, Math.round(q.x - s2 / 2), Math.round(q.y - s2 / 2), s2, Math.max(1, Math.round(s2 * 0.7)), "#15171f");
+  }
+}
+
+/* ---------------- the sights ---------------- */
+function drawSights(G) {
+  var ph = G.phase;
+  if (ph !== "aimx" && ph !== "aimy" && ph !== "release") return;
+  var lockedX = ph !== "aimx";
+  var top = proj(G.aimX, CROSSBAR + 0.55, 0), bot = proj(G.aimX, -0.2, 0);
+  for (var yy = Math.round(top.y); yy < Math.round(bot.y); yy += lockedX ? 1 : 2)
+    pxc(X, Math.round(top.x), yy, 1, 1, lockedX ? "rgba(90,212,106,0.8)" : "rgba(255,212,71,0.9)");
+  if (ph === "aimy" || ph === "release") {
+    var lockedY = ph !== "aimy";
+    var lf = proj(-NET_HALF - 0.75, G.aimY, 0), rg = proj(NET_HALF + 0.75, G.aimY, 0);
+    for (var xx = Math.round(lf.x); xx < Math.round(rg.x); xx += lockedY ? 1 : 2)
+      pxc(X, xx, Math.round(lf.y), 1, 1, lockedY ? "rgba(90,212,106,0.8)" : "rgba(255,212,71,0.9)");
+    var c = proj(G.aimX, G.aimY, 0);
+    var cx = Math.round(c.x), cy = Math.round(c.y);
+    pxc(X, cx - 3, cy - 3, 7, 7, "#2a1f00");
+    pxc(X, cx - 2, cy - 2, 5, 5, ph === "release" ? "#5ad46a" : "#ffd447");
+    pxc(X, cx - 1, cy - 1, 3, 3, "#2a1f00");
+  }
+}
+
+/* ---------------- particles ---------------- */
+function burst(G, x, y, n, colors, spread, life) {
+  for (var i = 0; i < n; i++) G.parts.push({
+    x: x, y: y, vx: (Math.random() * 2 - 1) * spread, vy: (Math.random() * 2 - 1) * spread - spread * 0.4,
+    g: 120 + Math.random() * 90, t: 0, life: life || (0.5 + Math.random() * 0.6),
+    c: colors[Math.floor(Math.random() * colors.length)]
+  });
+}
+function stepParts(G, dt) {
+  for (var i = G.parts.length - 1; i >= 0; i--) {
+    var p = G.parts[i];
+    p.t += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.t > p.life) G.parts.splice(i, 1);
+  }
+}
+function drawParts(G) {
+  for (var i = 0; i < G.parts.length; i++) {
+    var p = G.parts[i];
+    X.globalAlpha = Math.max(0, 1 - p.t / p.life);
+    pxc(X, p.x, p.y, 2, 2, p.c);
+    X.globalAlpha = 1;
+  }
+}
+
+/* ---------------- status bar ---------------- */
+function drawHud(G) {
+  pxc(X, 0, 0, W, HUD_H, "rgba(5,8,14,0.86)");
+  pxc(X, 0, HUD_H, W, 1, "#2c3448");
+  textAt(MODES[G.mode].name, 4, 2, "#d8c07a", 1, 1);
+
+  if (G.mode === "shootout") {
+    textCenter(G.players[G.turn].name + " ON THE PUCK", 160, 2, G.turn === 0 ? "#ff8a7a" : "#8ab4ff", 1, 1);
+    var rt = G.sd ? "SUDDEN DEATH" : "ROUND " + G.round;
+    textAt(rt, W - 4 - textWidth(rt, 1, 1), 2, G.sd ? "#e05c5c" : "#8d9ac2", 1, 1);
+    var x0 = 8, y0 = 12;
+    for (var pi = 0; pi < 2; pi++) {
+      var p = G.players[pi], y = y0 + pi * 0;
+      var bx = pi === 0 ? 8 : 176;
+      textAt(p.name, bx, 12, G.turn === pi ? (pi === 0 ? "#ff8a7a" : "#8ab4ff") : "#5a6480", 1, 1);
+      for (var i = 0; i < Math.max(5, p.taken.length); i++) {
+        var cx = bx + 54 + i * 7, res = p.taken[i];
+        if (res === true) { pxc(X, cx, 12, 5, 5, "#1d4a28"); pxc(X, cx + 1, 13, 3, 3, "#5ad46a"); }
+        else if (res === false) { pxc(X, cx, 12, 5, 5, "#4a1d1d"); pxc(X, cx + 1, 13, 3, 3, "#e05c5c"); }
+        else { pxc(X, cx, 12, 5, 5, "#1b2130"); }
+      }
+      textAt(String(p.goals), bx + 54 + Math.max(5, p.taken.length) * 7 + 3, 12, "#d8c07a", 1, 1);
+    }
+    return;
+  }
+
+  textCenter("SCORE " + G.score, 160, 2, "#e8ecf7", 1, 1);
+  var right = G.mode === "gauntlet" ? "STREAK " + G.streak
+    : G.mode === "rush" ? "TIME " + Math.max(0, Math.ceil(G.clock)) : "GOALS " + G.goals;
+  textAt(right, W - 4 - textWidth(right, 1, 1), 2, "#cfd8ef", 1, 1);
+  if (G.mode === "lives") for (var k = 0; k < 3; k++)
+    pxc(X, W - 10 - k * 7, 12, 5, 5, k < G.lives ? "#e05c5c" : "#2a2f3e");
+
+  var T = tenderOf(G);
+  textAt(T.name, 4, 12, "#9fe8ff", 1, 1);
+  var bx2 = 4 + textWidth(T.name, 1, 1) + 8;
+  textAt("SIZE", bx2, 12, "#50596e", 1, 1);
+  miniBar(bx2 + 26, 12, 20, (T.bw - 0.38) / 0.2);
+  textAt("READ", bx2 + 52, 12, "#50596e", 1, 1);
+  miniBar(bx2 + 78, 12, 20, T.read);
+}
+function miniBar(x, y, w, f) {
+  pxc(X, x, y, w, 5, "#141822");
+  pxc(X, x, y, Math.max(1, Math.round(w * Math.max(0, Math.min(1, f)))), 5, "#9fe8ff");
+  pxc(X, x, y, w, 1, "rgba(255,255,255,0.12)");
+}
+
+/* ---------------- the panel ---------------- */
+var BAR_X = 108, BAR_W = 204;
+function drawPanel(G) {
+  pxc(X, 0, PANEL_Y, W, H - PANEL_Y, "#0a0e18");
+  pxc(X, 0, PANEL_Y, W, 1, "#2c3448");
+  pxc(X, 0, PANEL_Y + 1, W, 1, "#141a28");
+
+  var side = G.aimX < -0.33 ? "GLOVE" : G.aimX > 0.33 ? "BLOCKER" : "MIDDLE";
+  var hgt = G.aimY > 0.85 ? "HIGH" : G.aimY > 0.38 ? "MID" : "LOW";
+  if (G.phase === "skate") {
+    var feet = Math.round(-G.sz * 3);
+    textAt(feet + " FT", 6, PANEL_Y + 3, "#f2f6ff", 2, 1);
+    textAt("CLOSING", 6, PANEL_Y + 18, "#50596e", 1, 1);
+    var dk = Math.abs(G.svx) / MAX_VX;
+    textAt(dk > 0.55 ? "HARD CUT" : dk > 0.2 ? "DRIFTING" : "STRAIGHT ON",
+      6, PANEL_Y + 29, dk > 0.55 ? "#e05c5c" : dk > 0.2 ? "#d8c07a" : "#5ad46a", 1, 1);
+  } else {
+    textAt(G.phase === "aimx" ? "----" : hgt, 6, PANEL_Y + 2,
+      G.phase === "aimx" ? "#39405e" : "#f2f6ff", 2, 1);
+    textAt(side, 6, PANEL_Y + 17, G.phase === "aimx" ? "#ffd447" : "#f2f6ff", 2, 1);
+    if (G.result && G.result.how) textAt(G.result.how, 6, PANEL_Y + 32, G.result.goal ? "#5ad46a" : "#e05c5c", 1, 1);
+    else if (G.phase === "aimx") textAt("SWEEPING", 6, PANEL_Y + 32, "#ffd447", 1, 1);
+  }
+
+  textAt("PWR", 86, PANEL_Y + 5, "#50596e", 1, 1);
+  pxc(X, BAR_X - 1, PANEL_Y + 3, BAR_W + 2, 10, "#05070f");
+  pxc(X, BAR_X, PANEL_Y + 4, BAR_W, 8, "#141822");
+  var pw = Math.round(BAR_W * Math.max(0, (G.power - 0.5) / 0.5));
+  pxc(X, BAR_X, PANEL_Y + 4, pw, 8, G.power > 0.9 ? "#5ad46a" : G.power > 0.7 ? "#d8c07a" : "#e05c5c");
+
+  if (G.phase === "release" || G.phase === "shot" || G.phase === "result") {
+    textAt("REL", 86, PANEL_Y + 21, "#50596e", 1, 1);
+    pxc(X, BAR_X - 1, PANEL_Y + 19, BAR_W + 2, 10, "#05070f");
+    pxc(X, BAR_X, PANEL_Y + 20, BAR_W, 8, "#141822");
+    var mid = BAR_X + BAR_W / 2;
+    pxc(X, Math.round(mid - BAR_W * 0.09), PANEL_Y + 20, Math.round(BAR_W * 0.18), 8, "#3a3418");
+    pxc(X, Math.round(mid - BAR_W * 0.025), PANEL_Y + 20, Math.max(2, Math.round(BAR_W * 0.05)), 8, "#1d4a28");
+    pxc(X, Math.round(mid), PANEL_Y + 17, 1, 14, "#ffffff");
+    var cur = G.phase === "release" ? G.acc : G.err;
+    pxc(X, Math.round(mid + cur * (BAR_W / 2)) - 1, PANEL_Y + 18, 3, 12,
+      G.phase === "release" ? "#ffffff" : (Math.abs(G.err) < 0.05 ? "#5ad46a" : "#ff9a3c"));
+  }
+
+  var t = null;
+  if (G.phase === "skate") t = "PRESS TO MAKE YOUR MOVE";
+  else if (G.phase === "aimx") t = "STOP IT FOR THE SIDE";
+  else if (G.phase === "aimy") t = "NOW STOP THE HEIGHT";
+  else if (G.phase === "release") t = "PRESS ON THE NOTCH";
+  else if (G.phase === "result" && G.resultT > 0.9) t = "NEXT RUSH";
+  if (t) {
+    var on = (G.phase !== "skate" && G.phase !== "aimx") || Math.floor(G.anim * 2) % 2 === 0;
+    textAt(t, W - 4 - textWidth(t, 1, 1), PANEL_Y + 31, on ? "#9fadd4" : "#49526b", 1, 1);
+  }
+  if (G.result && G.result.mph && G.phase === "result") {
+    var sp = G.result.mph + " MPH";
+    textAt(sp, W - 4 - textWidth(sp, 1, 1), PANEL_Y + 21, "#9fadd4", 1, 1);
+  }
+}
+
+/* ---------------- banner ---------------- */
+function drawBanner(G) {
+  if (G.phase !== "result" || !G.result) return;
+  var r = G.result, t = G.resultT;
+  var slide = Math.min(1, t / 0.13);
+  var y = Math.round(26 + (1 - slide) * -34);
+  var col = r.goal ? "#5ad46a" : "#e05c5c";
+  pxc(X, 0, y - 6, W, 26, "rgba(5,8,14,0.88)");
+  pxc(X, 0, y - 6, W, 1, col);
+  pxc(X, 0, y + 19, W, 1, col);
+  textCenterShadow(r.text, 160, y, col, "#05070f", r.goal ? 3 : 2, 1);
+  var sub = r.goal ? r.how : (r.save ? r.how + " SAVE" : "");
+  if (sub) {
+    /* clear of the drop shadow under GOAL!, which hangs three pixels low */
+    pxc(X, 0, y + 25, W, 11, "rgba(5,8,14,0.78)");
+    textCenter(sub, 160, y + 26, r.goal ? "#d8c07a" : "#9fadd4", 1, 1);
+  }
+  if (r.goal && r.notes.length) {
+    var list = r.notes.slice(), line = list.join("   ");
+    while (list.length > 1 && textWidth(line, 1, 1) > W - 12) { list.pop(); line = list.join("   "); }
+    pxc(X, 0, y + 37, W, 11, "rgba(5,8,14,0.78)");
+    textCenter(line, 160, y + 38, "#9ad46a", 1, 1);
+  }
+}
+
+function drawNotice(G) {
+  if (!G.notice) return;
+  var a = G.noticeT < 1.8 ? 1 : Math.max(0, 1 - (G.noticeT - 1.8) * 2);
+  X.globalAlpha = a;
+  pxc(X, 0, 100, W, 18, "rgba(5,8,14,0.9)");
+  pxc(X, 0, 100, W, 1, "#d8c07a"); pxc(X, 0, 117, W, 1, "#d8c07a");
+  textCenterShadow(G.notice, 160, 104, "#d8c07a", "#05070f", 2, 1);
+  X.globalAlpha = 1;
+}
+
+function drawPass(G) {
+  pxc(X, 0, 0, W, H, "rgba(5,8,14,0.94)");
+  var p = G.players[G.turn];
+  textCenterShadow("OVER THE BOARDS", 160, 34, "#d8c07a", "#5a4300", 2, 1);
+  textCenter(p.name, 160, 58, p.kit === 0 ? "#ff8a7a" : "#8ab4ff", 3, 1);
+  textCenter("IS UP", 160, 82, "#cfd8ef", 1, 1);
+  var a = G.players[0], b = G.players[1];
+  textCenter(a.goals + "  –  " + b.goals, 160, 98, "#f2f6ff", 2, 1);
+  if (G.sd) textCenter("SUDDEN DEATH", 160, 116, "#e05c5c", 1, 1);
+  if (Math.floor(UIst.t * 2) % 2 === 0) textCenter("PRESS WHEN READY", 160, 134, "#9fadd4", 1, 1);
+}
+
+/* ============================================================
+   MENU
+   ============================================================ */
+var menu = { sel: 0 };
+var MODE_LIST = ["shootout", "gauntlet", "lives", "rush"];
+var menuBg = null;
+
+function drawMenu() {
+  if (!menuBg) {
+    camSetZ(-15); cam.camX = 0;
+    drawRink({ hideBoard: true });
+    drawNet({});
+    drawNetFrame();
+    menuBg = document.createElement("canvas");
+    menuBg.width = W; menuBg.height = H;
+    menuBg.getContext("2d").drawImage(CV, 0, 0);
+  }
+  X.drawImage(menuBg, 0, 0);
+  pxc(X, 0, 0, W, H, "rgba(6,9,18,0.6)");
+
+  pxc(X, 0, 4, W, 48, "rgba(5,8,14,0.6)");
+  pxc(X, 40, 56, 240, 96, "rgba(5,8,14,0.66)");
+  pxc(X, 0, 152, W, 28, "rgba(5,8,14,0.76)");
+
+  textCenterShadow("TOP SHELF", 160, 12, "#d8c07a", "#5a4300", 4, 1);
+  textCenter("BREAKAWAY SHOOTOUT", 160, 45, "#9fadd4", 1, 1);
+  pxc(X, 58, 54, 204, 1, "#2c3448");
+
+  for (var i = 0; i < MODE_LIST.length; i++) {
+    var id = MODE_LIST[i], m = MODES[id], y = 60 + i * 12, on = menu.sel === i;
+    if (on) pxc(X, 46, y - 2, 228, 11, "#1f2a3e");
+    textAt(on ? "▸" : " ", 50, y, "#d8c07a", 1, 1);
+    textAt(m.name, 60, y, on ? "#d8c07a" : "#9aa3b8", 1, 1);
+    if (m.players === 2) textAt("2P", 60 + textWidth(m.name, 1, 1) + 6, y, "#5ad46a", 1, 1);
+    var bt = bestLine(id);
+    if (bt) textAt(bt, 268 - textWidth(bt, 1, 1), y, on ? "#9ad46a" : "#4d5f49", 1, 1);
+  }
+
+  var sel = MODES[MODE_LIST[menu.sel]];
+  var py = 110;
+  pxc(X, 46, py, 228, 38, "rgba(5,8,14,0.84)");
+  pxc(X, 46, py, 2, 38, "#d8c07a");
+  textAt(sel.line1, 54, py + 5, "#cfd8ef", 1, 1);
+  textAt(sel.line2, 54, py + 15, "#cfd8ef", 1, 1);
+  textAt(bestDetail(MODE_LIST[menu.sel]), 54, py + 27, "#6b7a66", 1, 1);
+
+  if (Math.floor(UIst.t * 2) % 2 === 0)
+    textCenter("↑ ↓ CHOOSE     PRESS TO PLAY", 160, 158, "#9fadd4", 1, 1);
+  textCenter("STEER WITH THE ARROWS  ·  A LATE CUT IS A DEKE", 160, 170, "#4f5a70", 1, 1);
+}
+function bestLine(id) {
+  var b = BEST[id];
+  if (id === "gauntlet") return b.streak ? b.streak + " IN A ROW" : "";
+  if (id === "shootout") return b.played ? b.played + " PLAYED" : "";
+  return b.goals ? b.goals + " GOALS" : "";
+}
+function bestDetail(id) {
+  var b = BEST[id];
+  if (id === "gauntlet") return b.streak ? "BEST RUN: " + b.streak + ", REACHED " + TENDERS[b.tier].name : "NO RUN YET";
+  if (id === "shootout") return b.played ? b.played + " SHOOTOUTS ON THIS DEVICE" : "FIND SOMEBODY TO BEAT";
+  if (id === "lives") return b.goals ? "BEST: " + b.goals + " GOALS, " + b.score + " POINTS" : "NOT PLAYED YET";
+  return b.goals ? "BEST: " + b.goals + " IN SIXTY SECONDS" : "NOT PLAYED YET";
+}
+
+function drawGameOver(G) {
+  pxc(X, 0, 0, W, H, "rgba(5,8,14,0.95)");
+  pxc(X, 0, 0, W, H, "rgba(5,8,14,0.5)");
+  if (G.mode === "shootout") {
+    var wp = G.players[G.winner];
+    textCenterShadow(wp.name + " WINS", 160, 14, "#d8c07a", "#5a4300", 3, 1);
+    textCenter(G.players[0].goals + "  –  " + G.players[1].goals, 160, 44, "#f2f6ff", 3, 1);
+    for (var pi = 0; pi < 2; pi++) {
+      var p = G.players[pi], y = 82 + pi * 14;
+      textAt(p.name, 56, y, pi === 0 ? "#ff8a7a" : "#8ab4ff", 1, 1);
+      for (var i = 0; i < p.taken.length; i++) {
+        var cx = 130 + i * 9;
+        pxc(X, cx, y - 1, 7, 7, p.taken[i] ? "#1d4a28" : "#4a1d1d");
+        pxc(X, cx + 1, y, 5, 5, p.taken[i] ? "#5ad46a" : "#e05c5c");
+      }
+    }
+    textCenter("PRESS FOR A REMATCH", 160, 134, "#cfd8ef", 1, 1);
+  } else {
+    textCenterShadow(G.mode === "rush" ? "TIME!" : "STOPPED", 160, 14, "#d8c07a", "#5a4300", 3, 1);
+    var rows = [["GOALS", G.goals + " / " + G.shots], ["BEST STREAK", String(G.bestStreak)],
+      ["GOALIE REACHED", tenderOf(G).name], ["SCORE", String(G.score)]];
+    for (var r = 0; r < rows.length; r++) {
+      var yy = 50 + r * 16;
+      textAt(rows[r][0], 48, yy, "#8d9ac2", 1, 1);
+      var big = r === rows.length - 1;
+      textAt(rows[r][1], 272 - textWidth(rows[r][1], big ? 2 : 1, 1), yy - (big ? 3 : 0),
+        big ? "#d8c07a" : "#e8ecf7", big ? 2 : 1, 1);
+    }
+    if (G.newBest && Math.floor(UIst.t * 4) % 2 === 0) textCenter("NEW PERSONAL BEST", 160, 122, "#5ad46a", 1, 1);
+    textCenter("PRESS TO GO AGAIN", 160, 138, "#cfd8ef", 1, 1);
+  }
+  textCenter("ESC FOR THE MENU", 160, 154, "#6b769b", 1, 1);
+  drawParts(G);
+}
+
+/* ============================================================
+   LOOP
+   ============================================================ */
+var G = null, view = "menu", last = 0;
+
+function startMode(mode) {
+  G = newGame(mode);
+  cam.camX = 0;
+  nextRush(G);
+  view = "play";
+}
+
+function update(dt) {
+  UIst.t += dt;
+  if (!G || view !== "play") { if (G) stepParts(G, dt); return; }
+  G.anim += dt;
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 3.2);
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 4);
+  if (G.lamp > 0 && G.phase !== "result") G.lamp = Math.max(0, G.lamp - dt);
+  if (G.notice) { G.noticeT += dt; if (G.noticeT > 2.4) { G.notice = null; G.noticeT = 0; } }
+  stepParts(G, dt);
+  stepNet(dt);
+  if (G.pass) return;
+
+  if (G.mode === "rush" && G.phase !== "result" && G.phase !== "shot") {
+    G.clock -= dt;
+    if (G.clock <= 0) { G.clock = 0; endRun(); return; }
+  }
+
+  if (G.phase === "skate") {
+    var acc = 11 * dt;
+    if (keys.left) G.svx -= acc;
+    if (keys.right) G.svx += acc;
+    if (!keys.left && !keys.right) G.svx *= Math.max(0, 1 - 3.2 * dt);
+    G.svx = Math.max(-MAX_VX, Math.min(MAX_VX, G.svx));
+    stepSkate(G, dt);
+    camFollow(G.sz, dt, 14);
+    cam.camX += (G.sx * 0.62 - cam.camX) * Math.min(1, dt * 7);
+    if (G.sz >= COMMIT_Z) { commit(G); }
+  } else if (G.phase === "aimx") {
+    camFollow(G.sz, dt, 10);
+    G.sxp += G.sxDir * sweepSpeed(G) * 2 * dt;
+    if (G.sxp > 1) { G.sxp = 1; G.sxDir = -1; }
+    if (G.sxp < -1) { G.sxp = -1; G.sxDir = 1; }
+    G.aimX = G.sxp * SWEEP_X;
+  } else if (G.phase === "aimy") {
+    G.syp += G.syDir * sweepSpeed(G) * 1.45 * dt;
+    if (G.syp > 1) { G.syp = 1; G.syDir = -1; }
+    if (G.syp < 0) { G.syp = 0; G.syDir = 1; }
+    G.aimY = G.syp * SWEEP_Y;
+  } else if (G.phase === "release") {
+    G.acc -= (1.55 + (1 - G.power) * 1.6) * dt;
+    if (G.acc <= -1) { G.acc = -1; release(G); }
+  } else if (G.phase === "shot") {
+    G.flightT += dt;
+    var slow = G.puck && !G.puck.crossed ? 0.42 : 0.72;
+    for (var i = 0; i < 4; i++) stepPuck(G, dt * slow / 4);
+    if (G.puck) {
+      G.trail.push({ x: G.puck.x, y: G.puck.y, z: G.puck.z });
+      if (G.trail.length > 20) G.trail.shift();
+    }
+    if (G.pending && !G.resolved) { G.resolved = true; onVerdict(); }
+    if (G.resolved) {
+      G.settleT = (G.settleT || 0) + dt;
+      if (G.settleT > 0.55) { G.settleT = null; settle(G); }
+    }
+  } else if (G.phase === "result") {
+    G.resultT += dt;
+  }
+}
+
+function onVerdict() {
+  var r = G.pending;
+  var p = proj(r.x, Math.max(r.y, 0.05), 0);
+  if (r.goal) {
+    G.shake = 1; G.flash = 0.75; G.lamp = 1;
+    burst(G, p.x, p.y, 34, ["#d8c07a", "#5ad46a", "#ffffff"], 95, 1.0);
+  } else {
+    G.shake = 0.45;
+    burst(G, p.x, p.y, 16, ["#eaf4ff", "#9fb6cc"], 70, 0.6);
+  }
+  if (r.woodwork) { G.shake = 1.2; burst(G, p.x, p.y, 20, ["#ffffff", "#e05c5c"], 120, 0.7); }
+}
+
+function endRun() {
+  G.newBest = recordBest(G);
+  if (G.newBest || G.mode === "shootout") burst(G, 160, 26, 60, ["#d8c07a", "#5ad46a", "#ffffff", "#e05c5c", "#2f63c8"], 110, 1.6);
+  view = "over";
+}
+
+function press() {
+  if (view === "menu") { startMode(MODE_LIST[menu.sel]); return; }
+  if (view === "over") { startMode(G.mode); return; }
+  if (!G) return;
+  if (G.pass) { G.pass = false; nextRush(G); return; }
+  if (G.phase === "skate") { if (G.sz > START_Z + 1.2) commit(G); }
+  else if (G.phase === "aimx") G.phase = "aimy";
+  else if (G.phase === "aimy") { G.acc = 1; G.phase = "release"; }
+  else if (G.phase === "release") release(G);
+  else if (G.phase === "result") {
+    if (G.resultT < 0.4) return;
+    if (G.mode === "shootout") { if (advanceShootout(G)) { endRun(); return; } return; }
+    if (runOver(G)) { endRun(); return; }
+    nextRush(G);
+  }
+}
+
+/* ---------------- draw ---------------- */
+function draw() {
+  if (view === "menu") { drawMenu(); return; }
+  if (!G) return;
+  var sx = 0, sy = 0;
+  if (G.shake > 0) {
+    sx = Math.round((Math.random() * 2 - 1) * G.shake * 4);
+    sy = Math.round((Math.random() * 2 - 1) * G.shake * 3);
+  }
+  X.save();
+  X.translate(sx, sy);
+  drawRink(G);
+  drawNet(G);
+  drawTender(G);
+  drawNetFrame();
+  drawSights(G);
+  drawPuck(G);
+  drawShooter(G);
+  drawLamp(G, G.lamp > 0 && Math.floor(UIst.t * 8) % 2 === 0);
+  drawParts(G);
+  X.restore();
+
+  if (G.flash > 0) { X.globalAlpha = G.flash * 0.22; pxc(X, 0, 0, W, H, "#ffffff"); X.globalAlpha = 1; }
+
+  if (view === "over") { drawGameOver(G); return; }
+  if (G.pass) { drawPass(G); return; }
+  drawHud(G);
+  drawPanel(G);
+  drawBanner(G);
+  if (G.phase !== "result") drawNotice(G);
+}
+
+function frame(ts) {
+  if (!last) last = ts;
+  var dt = Math.min(0.05, (ts - last) / 1000);
+  last = ts;
+  update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- input ---------------- */
+var keys = { left: false, right: false };
+function setKey(e, down) {
+  var k = e.key;
+  if (k === "ArrowLeft" || k === "a" || k === "A") { keys.left = down; e.preventDefault(); }
+  else if (k === "ArrowRight" || k === "d" || k === "D") { keys.right = down; e.preventDefault(); }
+}
+window.addEventListener("keydown", function (e) {
+  if (view === "menu") {
+    if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") { menu.sel = (menu.sel + MODE_LIST.length - 1) % MODE_LIST.length; e.preventDefault(); return; }
+    if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") { menu.sel = (menu.sel + 1) % MODE_LIST.length; e.preventDefault(); return; }
+  }
+  if (e.key === "Escape") { view = "menu"; e.preventDefault(); return; }
+  if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (!e.repeat) press(); return; }
+  setKey(e, true);
+});
+window.addEventListener("keyup", function (e) { setKey(e, false); });
+
+CV.addEventListener("pointerdown", function (e) {
+  try { window.focus(); } catch (err) { }
+  if (view === "menu") {
+    var r = CV.getBoundingClientRect();
+    var yy = (e.clientY - r.top) / r.height * H;
+    var idx = Math.floor((yy - 58) / 12);
+    if (idx >= 0 && idx < MODE_LIST.length) menu.sel = idx;
+  }
+  press();
+  e.preventDefault();
+});
+
+function holdButton(id, side) {
+  var b = document.getElementById(id);
+  if (!b) return;
+  var set = function (v) { return function (e) { keys[side] = v; b.classList.toggle("hot", v); e.preventDefault(); }; };
+  b.addEventListener("pointerdown", set(true));
+  b.addEventListener("pointerup", set(false));
+  b.addEventListener("pointerleave", set(false));
+  b.addEventListener("pointercancel", set(false));
+}
+holdButton("kL", "left"); holdButton("kR", "right");
+document.getElementById("kA").addEventListener("pointerdown", function (e) { press(); e.preventDefault(); });
+document.getElementById("kM").addEventListener("click", function () { document.body.classList.toggle("flat"); });
+
+function fit() {
+  var sw = Math.max(1, window.innerWidth - 40), sh = Math.max(1, window.innerHeight - 104);
+  var s = Math.max(1, Math.min(Math.floor(sw / W), Math.floor(sh / H)));
+  CV.style.width = (W * s) + "px";
+  CV.style.height = (H * s) + "px";
+}
+window.addEventListener("resize", fit);
+
+fit();
+Promise.resolve(loadBest()).catch(function () { }).then(function () { requestAnimationFrame(frame); });
+</script>
+</body></html>
