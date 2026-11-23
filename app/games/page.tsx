@@ -49,6 +49,14 @@ const GAMES = [
     tag: 'Arcade',
   },
   {
+    slug: 'keepers-nightmare',
+    name: "Keeper's Nightmare",
+    kicker: 'Retro penalty shootout',
+    blurb:
+      'Beat seven keepers, from Sunday League to Legend. He reads where you aim and remembers your habits, and from the third one on the sight refuses to hold still. Four modes, including a two-player shootout on one device.',
+    tag: 'Arcade · 2P',
+  },
+  {
     slug: 'gridiron-dynasty',
     name: 'Gridiron Dynasty',
     kicker: 'College football coach sim',

@@ -1,0 +1,1870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>KEEPER'S NIGHTMARE</title>
+<style>
+/* ============================================================
+   KEEPER'S NIGHTMARE — a 320x180 pixel penalty game.
+   One low-resolution canvas, scaled up by a whole number so
+   every pixel stays square.
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#06080f}
+body{
+  display:flex;align-items:center;justify-content:center;
+  font-family:ui-monospace,"Cascadia Mono","Segoe UI Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;
+  color:#cfd8ef;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:none;
+  user-select:none;-webkit-user-select:none;
+}
+#wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px}
+#cab{
+  position:relative;padding:10px;
+  background:linear-gradient(#17201a,#0c120e);
+  border:2px solid #31462f;
+  box-shadow:0 0 0 2px #06080f, 0 16px 40px rgba(0,0,0,.6);
+}
+#cab::before{content:"";position:absolute;inset:4px;border:1px solid #27371f;pointer-events:none}
+canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;background:#0b1020;cursor:crosshair;touch-action:none}
+#scan{
+  position:absolute;inset:10px;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,
+    rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.17) 3px, rgba(0,0,0,.17) 4px);
+  mix-blend-mode:multiply;
+}
+body.flat #scan{display:none}
+
+#pad{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
+.key{
+  font:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  background:#18241a;color:#cfd8ef;border:2px solid #39513a;
+  padding:7px 12px;cursor:pointer;min-width:42px;
+}
+.key:active,.key.hot{background:#2a4a2c;border-color:#5ad46a;color:#5ad46a}
+.key.wide{min-width:130px}
+#dpad{display:grid;grid-template-columns:repeat(3,42px);grid-template-rows:repeat(2,30px);gap:4px}
+#dpad .key{min-width:0;padding:4px 0;text-align:center}
+#kU{grid-column:2;grid-row:1}
+#kL{grid-column:1;grid-row:2}
+#kD{grid-column:2;grid-row:2}
+#kR{grid-column:3;grid-row:2}
+#hint{font-size:10.5px;letter-spacing:.1em;color:#6b8a6e;text-align:center;line-height:1.7}
+#hint b{color:#9fc4a2;font-weight:400}
+@media (max-width:620px){ #hint{display:none} }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="cab">
+    <canvas id="c" width="320" height="180"></canvas>
+    <div id="scan"></div>
+  </div>
+  <div id="pad">
+    <div id="dpad">
+      <button class="key" id="kU" aria-label="Aim higher">&#9650;</button>
+      <button class="key" id="kL" aria-label="Aim left">&#9664;</button>
+      <button class="key" id="kD" aria-label="Aim lower">&#9660;</button>
+      <button class="key" id="kR" aria-label="Aim right">&#9654;</button>
+    </div>
+    <button class="key wide" id="kA">Shoot</button>
+    <button class="key" id="kM" title="Toggle the CRT filter">CRT</button>
+  </div>
+  <div id="hint">
+    Against the first keepers: <b>arrows</b>, <b>WASD</b> or drag to place the shot, then
+    <b>space</b> or <b>tap</b> for power and the notch<br>
+    From the third keeper on the sight will not hold still &mdash; stop the side, stop the height,
+    then power and notch. Four presses, no second chances<br>
+    He reads where you keep pointing and remembers where you have gone before
+  </div>
+</div>
+<script>
+/* ============================================================
+   KEEPER’S NIGHTMARE — pixel toolkit
+   A hand-drawn 5x7 bitmap font and sprite blitter, so every
+   glyph and every limb is placed pixel by pixel.
+   ============================================================ */
+"use strict";
+
+var W = 320, H = 180;
+var CV = document.getElementById("c");
+var X = CV.getContext("2d", { alpha: false });
+X.imageSmoothingEnabled = false;
+
+/* ---------------- palette ---------------- */
+var P = {
+  sky1: "#2b4a8c", sky2: "#4a76bd", sky3: "#7aa5dd",
+  dusk1: "#2a1f4e", dusk2: "#6b3a62", dusk3: "#c46a52",
+  night1: "#070b1e", night2: "#101a3c", night3: "#1b2a55",
+  grass1: "#2f6b35", grass2: "#276029", grass3: "#3b7d41",
+  chalk: "#eef3e2", dirt: "#6a5436",
+  post: "#ffd447", postDark: "#c79a14",
+  stand: "#2a2f47", standLip: "#3d4466",
+  ink: "#0a0c16", white: "#f2f6ff", dim: "#8d9ac2",
+  red: "#e0483c", blue: "#3f6fd8", gold: "#ffd447",
+  green: "#5ad46a", orange: "#ff9a3c", ball: "#8b4a22", ballLace: "#f2f6ff"
+};
+
+/* ---------------- 5x7 bitmap font ----------------
+   Seven rows of five columns per glyph. Authored by hand so the
+   letterforms stay readable at one device pixel per cell.      */
+var FONT = {
+  "A": " ### /#   #/#   #/#####/#   #/#   #/#   #",
+  "B": "#### /#   #/#   #/#### /#   #/#   #/#### ",
+  "C": " ### /#   #/#    /#    /#    /#   #/ ### ",
+  "D": "#### /#   #/#   #/#   #/#   #/#   #/#### ",
+  "E": "#####/#    /#    /#### /#    /#    /#####",
+  "F": "#####/#    /#    /#### /#    /#    /#    ",
+  "G": " ### /#   #/#    /#  ##/#   #/#   #/ ####",
+  "H": "#   #/#   #/#   #/#####/#   #/#   #/#   #",
+  "I": "#####/  #  /  #  /  #  /  #  /  #  /#####",
+  "J": "    #/    #/    #/    #/    #/#   #/ ### ",
+  "K": "#   #/#  # /# #  /##   /# #  /#  # /#   #",
+  "L": "#    /#    /#    /#    /#    /#    /#####",
+  "M": "#   #/## ##/# # #/#   #/#   #/#   #/#   #",
+  "N": "#   #/##  #/# # #/#  ##/#   #/#   #/#   #",
+  "O": " ### /#   #/#   #/#   #/#   #/#   #/ ### ",
+  "P": "#### /#   #/#   #/#### /#    /#    /#    ",
+  "Q": " ### /#   #/#   #/#   #/# # #/#  # / ## #",
+  "R": "#### /#   #/#   #/#### /# #  /#  # /#   #",
+  "S": " ####/#    /#    / ### /    #/    #/#### ",
+  "T": "#####/  #  /  #  /  #  /  #  /  #  /  #  ",
+  "U": "#   #/#   #/#   #/#   #/#   #/#   #/ ### ",
+  "V": "#   #/#   #/#   #/#   #/#   #/ # # /  #  ",
+  "W": "#   #/#   #/#   #/#   #/# # #/## ##/#   #",
+  "X": "#   #/#   #/ # # /  #  / # # /#   #/#   #",
+  "Y": "#   #/#   #/ # # /  #  /  #  /  #  /  #  ",
+  "Z": "#####/    #/   # /  #  / #   /#    /#####",
+  "0": " ### /#   #/#  ##/# # #/##  #/#   #/ ### ",
+  "1": "  #  / ##  /  #  /  #  /  #  /  #  / ### ",
+  "2": " ### /#   #/    #/   # /  #  / #   /#####",
+  "3": "#####/   # /  #  /   # /    #/#   #/ ### ",
+  "4": "   # /  ## / # # /#  # /#####/   # /   # ",
+  "5": "#####/#    /#### /    #/    #/#   #/ ### ",
+  "6": "  ## / #   /#    /#### /#   #/#   #/ ### ",
+  "7": "#####/    #/   # /  #  / #   / #   / #   ",
+  "8": " ### /#   #/#   #/ ### /#   #/#   #/ ### ",
+  "9": " ### /#   #/#   #/ ####/    #/   # / ##  ",
+  " ": "     /     /     /     /     /     /     ",
+  ".": "     /     /     /     /     / ##  / ##  ",
+  ",": "     /     /     /     / ##  / ##  / #   ",
+  "!": "  #  /  #  /  #  /  #  /  #  /     /  #  ",
+  "?": " ### /#   #/    #/   # /  #  /     /  #  ",
+  "'": "  #  /  #  /     /     /     /     /     ",
+  "-": "     /     /     /#####/     /     /     ",
+  "+": "     /  #  /  #  /#####/  #  /  #  /     ",
+  ":": "     / ##  / ##  /     / ##  / ##  /     ",
+  "/": "    #/    #/   # /  #  / #   /#    /#    ",
+  "(": "   # /  #  / #   / #   / #   /  #  /   # ",
+  ")": " #   /  #  /   # /   # /   # /  #  / #   ",
+  "%": "#   #/#  # /  #  /  #  /  #  / #  #/#   #",
+  "&": " ##  /#  # /#  # / ##  /#  ##/#  # / ## #",
+  "=": "     /     /#####/     /#####/     /     ",
+  "*": "     /#   #/ # # /#####/ # # /#   #/     ",
+  "#": " # # /#####/ # # / # # /#####/ # # /     ",
+  "°": " ##  /#  # / ##  /     /     /     /     ",
+  "×": "     /#   #/ # # /  #  / # # /#   #/     ",
+  "↑": "  #  / ### /# # #/  #  /  #  /  #  /  #  ",
+  "↓": "  #  /  #  /  #  /# # #/ ### /  #  /     ",
+  "←": "     /  #  / #   /#####/ #   /  #  /     ",
+  "→": "     /  #  /   # /#####/   # /  #  /     ",
+  "▲": "     /  #  / ### /#####/     /     /     ",
+  "▼": "     /     /#####/ ### /  #  /     /     ",
+  "♥": "     / # # /#####/#####/ ### /  #  /     "
+};
+var GLYPH = {};
+(function compileFont() {
+  var ch;
+  for (ch in FONT) {
+    if (!Object.prototype.hasOwnProperty.call(FONT, ch)) continue;
+    GLYPH[ch] = FONT[ch].split("/").map(function (row) {
+      var bits = [];
+      for (var i = 0; i < 5; i++) bits.push(row.charAt(i) === "#");
+      return bits;
+    });
+  }
+})();
+
+function px(x, y, w, h, c) { X.fillStyle = c; X.fillRect(x | 0, y | 0, w | 0, h | 0); }
+function pxc(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
+
+/* Draw a string. s = pixel size, tracking = gap between glyphs. */
+function textAt(str, x, y, color, s, tracking, ctx) {
+  s = s || 1; tracking = tracking == null ? 1 : tracking;
+  var c = ctx || X;
+  var cx = x | 0, i, r, col;
+  str = String(str).toUpperCase();
+  c.fillStyle = color;
+  for (i = 0; i < str.length; i++) {
+    var g = GLYPH[str.charAt(i)];
+    if (!g) { cx += (5 + tracking) * s; continue; }
+    for (r = 0; r < 7; r++) for (col = 0; col < 5; col++) {
+      if (g[r][col]) c.fillRect(cx + col * s, (y | 0) + r * s, s, s);
+    }
+    cx += (5 + tracking) * s;
+  }
+  return cx - tracking * s;
+}
+function textWidth(str, s, tracking) {
+  s = s || 1; tracking = tracking == null ? 1 : tracking;
+  return String(str).length * (5 + tracking) * s - tracking * s;
+}
+function textCenter(str, cx, y, color, s, tracking, ctx) {
+  return textAt(str, Math.round(cx - textWidth(str, s, tracking) / 2), y, color, s, tracking, ctx);
+}
+/* Chunky drop-shadowed headline. */
+function textShadow(str, x, y, color, shadow, s, tracking) {
+  textAt(str, x + s, y + s, shadow, s, tracking);
+  textAt(str, x, y, color, s, tracking);
+}
+function textCenterShadow(str, cx, y, color, shadow, s, tracking) {
+  var x = Math.round(cx - textWidth(str, s, tracking) / 2);
+  textShadow(str, x, y, color, shadow, s, tracking);
+}
+
+/* ---------------- sprite blitter ----------------
+   Rows of characters; each character is a palette key.
+   "." is transparent.                                */
+function drawSprite(rows, x, y, pal, flip, scale, ctx) {
+  var c = ctx || X;
+  scale = scale || 1;
+  var h = rows.length, w = rows[0].length, r, i;
+  for (r = 0; r < h; r++) {
+    var row = rows[r];
+    for (i = 0; i < w; i++) {
+      var k = row.charAt(flip ? w - 1 - i : i);
+      var col = pal[k];
+      if (!col) continue;
+      c.fillStyle = col;
+      c.fillRect((x | 0) + i * scale, (y | 0) + r * scale, scale, scale);
+    }
+  }
+}
+
+/* ---------------- kits ----------------
+   Two outfield kits for the pass-and-play shootout, plus the keeper,
+   who wears something deliberately loud so he reads against the net. */
+var KITS = [
+  { name: "RED",  shirt: "#d83b30", dark: "#9c2820", shorts: "#e8ecf7", sdark: "#b9c1d6", sock: "#1b2140", num: "#f2f6ff" },
+  { name: "BLUE", shirt: "#3560c8", dark: "#22418c", shorts: "#e8ecf7", sdark: "#b9c1d6", sock: "#141a30", num: "#f2f6ff" }
+];
+var KEEPER_KIT = {
+  shirt: "#5ad46a", dark: "#2f8a3c", shorts: "#1f2a44", sdark: "#141c30",
+  glove: "#ffd447", gdark: "#c79a14", sock: "#1f2a44", skin: "#c58b5c", boot: "#161a2c", hair: "#2e2218"
+};
+
+function kitPal(k) {
+  return {
+    ".": null, " ": null,
+    j: k.shirt, k: k.dark, n: k.num,
+    p: k.shorts, q: k.sdark, o: k.sock,
+    s: "#c58b5c", h: "#2e2218", b: "#161a2c"
+  };
+}
+function keeperPal() {
+  return {
+    ".": null, " ": null,
+    j: KEEPER_KIT.shirt, k: KEEPER_KIT.dark,
+    g: KEEPER_KIT.glove, G: KEEPER_KIT.gdark,
+    p: KEEPER_KIT.shorts, q: KEEPER_KIT.sdark,
+    o: KEEPER_KIT.sock, s: KEEPER_KIT.skin, h: KEEPER_KIT.hair, b: KEEPER_KIT.boot
+  };
+}
+
+/* ---------------- the taker ----------------
+   11 x 18, seen from behind: run-up, plant, strike, follow-through. */
+var TAKER = [
+  /* 0 — standing over the ball */
+  ["...hhhhh...", "..hhhhhhh..", "...hsssh...", "....sss....", "..jjjjjjj..",
+   ".jjjjjjjjj.", ".jjjnnnjjj.", ".jjjnnnjjj.", ".jjjjjjjjj.", "..jjjjjjj..",
+   "...ppppp...", "...pp.pp...", "...pp.pp...", "...qp.pq...", "...oo.oo...",
+   "...oo.oo...", "..bbb.bbb..", "..........."],
+  /* 1 — step */
+  ["..hhhhh....", ".hhhhhhh...", "..hsssh....", "...sss.....", ".jjjjjjj...",
+   "jjjjjjjjj..", "jjjnnnjjj..", "jjjnnnjjj..", "jjjjjjjjj..", ".jjjjjjj...",
+   "..pppp.....", "..pp.pp....", ".pp...pp...", ".qp...pq...", ".oo....oo..",
+   ".oo....oo..", "bbb....bbb.", "..........."],
+  /* 2 — plant, striking leg loaded */
+  ["..hhhhh....", ".hhhhhhh...", "..hsssh....", "...sss.....", ".jjjjjjj...",
+   "jjjjjjjjj..", "jjjnnnjjj..", "jjjnnnjjj..", "jjjjjjjjjq.", ".jjjjjjjqq.",
+   "..pppp.qq..", "..pp..qq...", "..pp.qq....", "..qp.q.....", "..oo.o.....",
+   "..oo.......", ".bbb.......", "..........."],
+  /* 3 — contact, leg swung through */
+  ["...hhhhh...", "..hhhhhhh..", "...hsssh...", "....sss....", "..jjjjjjj..",
+   ".jjjjjjjjj.", ".jjjnnnjjj.", ".jjjnnnjjj.", "..jjjjjjj..", "...jjjjj...",
+   "...pppp....", "..pp..qqq..", "..pp....qqq", "..qp......q", "..oo.......",
+   "..oo.......", ".bbb.......", "..........."],
+  /* 4 — follow-through, both feet off */
+  ["...hhhhh...", "..hhhhhhh..", "...hsssh...", "....sss....", "..jjjjjjj..",
+   ".jjjjjjjjj.", ".jjjnnnjjj.", ".jjjnnnjjj.", "..jjjjjjj..", "...jjjjjq..",
+   "...pppp.qq.", "..pp...qq..", "..pp..qq...", "..qp.qq....", "..oo.......",
+   "...oo......", "...bbb.....", "..........."]
+];
+
+/* ---------------- the keeper ----------------
+   Standing frames are 15 x 16. Dive frames are wide and flat, 22 x 11,
+   drawn facing left and mirrored for the other side.            */
+var KEEPER_SET = [
+  "......hhh......", ".....hhhhh.....", ".....hsssh.....", "......sss......",
+  "...jjjjjjjjj...", "..jjjjjjjjjjj..", "gGjjjjjjjjjjjGg", "ggjjjjjjjjjjjgg",
+  "...jjjjjjjjj...", "....ppppppp....", "....pp...pp....", "....pp...pp....",
+  "....qp...pq....", "....oo...oo....", "....oo...oo....", "...bbb...bbb..."
+];
+var KEEPER_LEAN = [
+  "....hhh........", "...hhhhh.......", "...hsssh.......", "....sss........",
+  "..jjjjjjjjj....", ".jjjjjjjjjjj...", "gGjjjjjjjjjjjGg", "ggjjjjjjjjjjgg.",
+  "..jjjjjjjjj....", "...ppppppp.....", "..pp....pp.....", "..pp.....pp....",
+  "..qp.....pq....", "..oo......oo...", "..oo......oo...", ".bbb......bbb.."
+];
+/* low dive: body horizontal, arms stretched toward the near post */
+var KEEPER_DIVE_LOW = [
+  "......................", "gg....................", "gGg...................",
+  ".ggssh................", "..jjjjjjjjjjj.........", ".jjjjjjjjjjjjjppppp...",
+  "..jjjjjjjjjjjqpppppqoo", "....jjjjjjj....ppp..oo", "...............q...bbb",
+  "......................", "......................"
+];
+/* high dive: full extension up and across */
+var KEEPER_DIVE_HIGH = [
+  "gg....................", "gGg...................", ".gg...................",
+  "..sssh................", "..jjjjjjjjj...........", "..jjjjjjjjjjjppp......",
+  "...jjjjjjjjjjqppppoo..", "....jjjjjjj....pppoo..", "..................bbb.",
+  "......................", "......................"
+];
+/* centre: feet planted, arms straight up */
+var KEEPER_HIGH = [
+  "..gg.......gg..", "..gG.......Gg..", "..gg.......gg..", "..jj..hhh..jj..",
+  "..jj.hhhhh.jj..", "..jj.hsssh.jj..", "..jjj.sss.jjj..", "...jjjjjjjjj...",
+  "..jjjjjjjjjjj..", "...jjjjjjjjj...", "....ppppppp....", "....pp...pp....",
+  "....qp...pq....", "....oo...oo....", "....oo...oo....", "...bbb...bbb..."
+];
+/* centre: dropped on the shot, smothering low */
+var KEEPER_LOW = [
+  "...............", "...............", "......hhh......", ".....hhhhh.....",
+  ".....hsssh.....", "..g...sss...g..", ".gGjjjjjjjjjGg.", "ggjjjjjjjjjjjgg",
+  ".gjjjjjjjjjjjg.", "..jjjjjjjjjjj..", "...ppppppppp...", "..pp.......pp..",
+  "..oo.......oo..", "..oo.......oo..", ".bbb.......bbb.", "..............."
+];
+/* beaten: sprawled the wrong way, watching it go in */
+var KEEPER_BEATEN = [
+  "......................", "....gg................", "...gGg................",
+  "..ggsssh..............", "...jjjjjjjjjj.........", "...jjjjjjjjjjjpppp....",
+  "....jjjjjjjjjqppppoo..", ".....jjjjjjj...pppoo..", "..................bbb.",
+  "......................", "......................"
+];
+
+/* ---------------- the ball ----------------
+   A panelled football, three sizes as it recedes. */
+var SBALL_BIG = [
+  "...####...", ".##wwww##.", ".#wwkkww#.", "#wwkkkkww#", "#wkkwwkkw#",
+  "#wkkwwkkw#", "#wwkkkkww#", ".#wwkkww#.", ".##wwww##.", "...####..."
+];
+var SBALL_MID = [".###.", "#wkw#", "#kkk#", "#wkw#", ".###."];
+function ballPal() { return { ".": null, "#": "#cfd8e8", w: "#f6f9ff", k: "#1b2338" }; }
+
+/* ---------------- flags and bunting in the stands ---------------- */
+var BANNER = ["#########", "#.......#", "#.#####.#", "#.......#", "#########"];
+/* A seeded value stream, so crowd layouts and gusts stay stable
+   within a kick instead of boiling between frames. */
+function hash32(n) {
+  n = (n ^ 61) ^ (n >>> 16); n = (n + (n << 3)) >>> 0;
+  n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d) >>> 0;
+  return (n ^ (n >>> 15)) >>> 0;
+}
+function rnd(seed) { return hash32(seed >>> 0) / 4294967296; }
+/* ============================================================
+   KEEPER'S NIGHTMARE — pitch, goal, net
+   The ball starts on the penalty spot at z = 0 and the goal line
+   sits at z = 12. Everything is yards.
+   ============================================================ */
+
+var FOCAL = 296, HORIZON = 62, CAMY = 1.3, CAMZ = -5.5;
+var GOAL_Z = 12;            /* penalty spot to goal line */
+var GOAL_HALF = 4.0;        /* 8 yards between the posts */
+var CROSSBAR = 2.667;       /* 8 feet */
+var NET_DEPTH = 1.9;
+var POST_R = 0.075;
+
+function proj(x, y, z) {
+  var d = z - CAMZ;
+  if (d < 0.4) d = 0.4;
+  var s = FOCAL / d;
+  return { x: 160 + x * s, y: HORIZON - (y - CAMY) * s, s: s };
+}
+
+/* ---------------- pre-rendered stadium ---------------- */
+var bgCv = document.createElement("canvas");
+bgCv.width = W; bgCv.height = H;
+var bgX = bgCv.getContext("2d");
+bgX.imageSmoothingEnabled = false;
+
+var SKYSET = {
+  day: { a: "#3f74c8", b: "#6d9cdd", c: "#9cc2ee", sun: "#fff3c4", haze: "#c9ddf5" },
+  dusk: { a: "#2a1f4e", b: "#7b3f6a", c: "#d9794f", sun: "#ffd08a", haze: "#e9a06d" },
+  night: { a: "#05081a", b: "#0b1430", c: "#162448", sun: "#dfe7fa", haze: "#1d2d58" }
+};
+
+var CROWD_DAY = ["#8e4a44", "#b9c1d6", "#3f5c96", "#9a8450", "#6b5a4a", "#7c88ab"];
+var CROWD_NIGHT = ["#4a2824", "#5e6484", "#24395f", "#5c4e30", "#3a3028", "#434b68"];
+function crowdBand(ctx, y0, h, bright) {
+  var cols = bright ? CROWD_DAY : CROWD_NIGHT, n = 0;
+  for (var row = 0; row < h; row++) {
+    if (row % 3 === 2) { pxc(ctx, 0, y0 + row, W, 1, bright ? "#2a3048" : "#161b30"); continue; }
+    for (var x = 0; x < W; x += 2) {
+      n++;
+      if (rnd(n * 2654435761 + row * 97) < 0.2) continue;
+      pxc(ctx, x + (row % 2), y0 + row, 1, 1, cols[Math.floor(rnd(n * 40503 + 7) * cols.length)]);
+    }
+  }
+}
+function lightTower(ctx, x, night) {
+  pxc(ctx, x - 1, 16, 3, 22, night ? "#0d1226" : "#1b2038");
+  pxc(ctx, x - 13, 8, 27, 9, night ? "#141b36" : "#232a46");
+  for (var r = 0; r < 3; r++) for (var i = 0; i < 9; i++) {
+    var on = night || ((i + r) % 2 === 0);
+    pxc(ctx, x - 12 + i * 3, 9 + r * 3, 2, 2, on ? (night ? "#fff6c8" : "#e4ecff") : "#39405e");
+  }
+  if (night) {
+    ctx.globalAlpha = 0.14; pxc(ctx, x - 22, 6, 45, 16, "#fff6c8");
+    ctx.globalAlpha = 0.07; pxc(ctx, x - 34, 4, 69, 40, "#fff6c8");
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* Hoardings run the width of the frame behind the goal. They are the
+   one place in the scene allowed to be loud. */
+var AD_COLS = ["#d83b30", "#1f6fd0", "#2f9e4f", "#e8a21c", "#8c3fb0", "#19989c"];
+function hoardings(ctx, night) {
+  var y0 = 56, h = 9;
+  pxc(ctx, 0, y0 - 2, W, 2, night ? "#131a30" : "#262d46");
+  for (var i = 0; i < 11; i++) {
+    var x = i * 30 - 4, c = AD_COLS[i % AD_COLS.length];
+    if (night) c = shade(c, 0.55);
+    pxc(ctx, x, y0, 28, h, c);
+    pxc(ctx, x, y0, 28, 1, shade(c, 1.35));
+    pxc(ctx, x, y0 + h - 1, 28, 1, shade(c, 0.6));
+    /* a stripe motif instead of text, which would be unreadable here */
+    for (var k = 0; k < 3; k++) pxc(ctx, x + 4 + k * 7, y0 + 3, 3, 3, shade(c, i % 2 ? 1.6 : 0.45));
+    pxc(ctx, x + 28, y0, 2, h, night ? "#0b1024" : "#171d33");
+  }
+  pxc(ctx, 0, y0 + h, W, 2, night ? "#0b1024" : "#1b2238");
+}
+function shade(hex, f) {
+  var n = parseInt(hex.slice(1), 16);
+  var r = Math.min(255, Math.round(((n >> 16) & 255) * f));
+  var g = Math.min(255, Math.round(((n >> 8) & 255) * f));
+  var b = Math.min(255, Math.round((n & 255) * f));
+  return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+
+function pitchLine(ctx, x1, z1, x2, z2, col, thick) {
+  /* Walk the line in world space and plot projected pixels, so the
+     line thins correctly as it runs away from the camera. */
+  var steps = 160, i;
+  for (i = 0; i <= steps; i++) {
+    var t = i / steps;
+    var p = proj(x1 + (x2 - x1) * t, 0, z1 + (z2 - z1) * t);
+    if (p.y < HORIZON || p.y > H) continue;
+    var w = Math.max(1, Math.round((thick || 0.14) * p.s));
+    pxc(ctx, Math.round(p.x - w / 2), Math.round(p.y), w, Math.max(1, Math.round(w * 0.6)), col);
+  }
+}
+
+function renderPitch(G) {
+  var S = SKYSET[G.sky], night = G.sky === "night";
+  bgX.clearRect(0, 0, W, H);
+
+  pxc(bgX, 0, 0, W, 14, S.a);
+  pxc(bgX, 0, 14, W, 7, S.a);
+  pxc(bgX, 0, 21, W, 6, S.b);
+  pxc(bgX, 0, 27, W, 5, S.b);
+  pxc(bgX, 0, 32, W, 5, S.c);
+  pxc(bgX, 0, 37, W, 3, S.haze);
+
+  if (night) {
+    for (var i = 0; i < 70; i++)
+      pxc(bgX, Math.floor(rnd(i * 7 + 1) * W), Math.floor(rnd(i * 13 + 5) * 34), 1, 1, i % 5 ? "#5c6a9c" : "#e8eeff");
+  } else if (G.sky === "dusk") {
+    pxc(bgX, 236, 20, 10, 10, S.sun); pxc(bgX, 234, 22, 14, 6, S.sun);
+  } else {
+    pxc(bgX, 246, 12, 12, 12, S.sun); pxc(bgX, 244, 14, 16, 8, S.sun);
+  }
+
+  pxc(bgX, 0, 40, W, 3, night ? "#121832" : "#232942");
+  crowdBand(bgX, 43, 8, !night);
+  pxc(bgX, 0, 51, W, 2, night ? "#1b2240" : "#39415f");
+  crowdBand(bgX, 53, 3, !night);
+  lightTower(bgX, 30, night);
+  lightTower(bgX, 278, night);
+  hoardings(bgX, night);
+
+  /* ---- grass ---- */
+  var g1 = night ? "#18431e" : "#317038";
+  var g2 = night ? "#123112" : "#245526";
+  var chalk = night ? "#cfd8c4" : "#f2f6e8";
+  pxc(bgX, 0, 65, W, H - 65, g1);
+  var far = GOAL_Z + 4, z;
+  for (z = -2; z < far; z += 2.5) {
+    if ((Math.round((z + 2) / 2.5) % 2) === 0) continue;
+    var pa = proj(0, 0, z), pb = proj(0, 0, Math.min(z + 2.5, far));
+    trap(bgX, pb.y, pa.y, 30 * pb.s, 30 * pa.s, g2);
+  }
+
+  /* ---- markings ---- */
+  pitchLine(bgX, -30, GOAL_Z, 30, GOAL_Z, chalk, 0.15);                 /* goal line */
+  pitchLine(bgX, -10, 6, 10, 6, chalk, 0.13);                           /* six-yard box */
+  pitchLine(bgX, -10, 6, -10, GOAL_Z, chalk, 0.13);
+  pitchLine(bgX, 10, 6, 10, GOAL_Z, chalk, 0.13);
+  pitchLine(bgX, -22, -4, -22, GOAL_Z, chalk, 0.13);                    /* penalty area sides */
+  pitchLine(bgX, 22, -4, 22, GOAL_Z, chalk, 0.13);
+  /* the D, drawn as the arc of a 10-yard circle around the spot */
+  for (var a = -1.15; a <= 1.15; a += 0.045) {
+    var px2 = Math.sin(a) * 10, pz2 = -Math.cos(a) * 10;
+    if (pz2 > -6.2) continue;
+    var pp = proj(px2, 0, pz2);
+    if (pp.y < HORIZON || pp.y > H) continue;
+    pxc(bgX, Math.round(pp.x), Math.round(pp.y), Math.max(1, Math.round(0.14 * pp.s)), 1, chalk);
+  }
+  /* penalty spot */
+  var ps = proj(0, 0, 0);
+  var psw = Math.max(3, Math.round(0.11 * ps.s));
+  pxc(bgX, Math.round(ps.x - psw / 2), Math.round(ps.y), psw, Math.max(1, Math.round(psw * 0.42)), chalk);
+
+  /* a strip of run-off and then the wall of the stand */
+  var back = proj(0, 0, GOAL_Z + 4.5);
+  pxc(bgX, 0, 65, W, Math.max(0, Math.round(back.y) - 65), night ? "#101831" : "#2d3450");
+  pxc(bgX, 0, Math.max(65, Math.round(back.y) - 1), W, 1, night ? "#1b2444" : "#464e73");
+}
+
+function trap(ctx, yTop, yBot, wTop, wBot, color) {
+  var t0 = Math.round(yTop), t1 = Math.round(yBot), y;
+  if (t1 <= t0) return;
+  for (y = t0; y < t1; y++) {
+    if (y < 65 || y >= H) continue;
+    var f = (y - t0) / Math.max(1, t1 - t0);
+    var w = wTop + (wBot - wTop) * f;
+    pxc(ctx, Math.round(160 - w), y, Math.round(w * 2), 1, color);
+  }
+}
+
+/* ============================================================
+   THE GOAL AND THE NET
+   The net is a live mesh: when the ball hits it the struck point
+   is pushed back and the displacement ripples outward.
+   ============================================================ */
+var netHits = [];
+function netHit(x, y, power) {
+  netHits.push({ x: x, y: y, t: 0, amp: 0.45 + power * 0.5 });
+  if (netHits.length > 4) netHits.shift();
+}
+function netReset() { netHits.length = 0; }
+function stepNet(dt) {
+  for (var i = netHits.length - 1; i >= 0; i--) {
+    netHits[i].t += dt;
+    if (netHits[i].t > 2.4) netHits.splice(i, 1);
+  }
+}
+/* Extra depth at a point on the net, in yards. */
+function netPush(gx, gy) {
+  var p = 0;
+  for (var i = 0; i < netHits.length; i++) {
+    var hH = netHits[i];
+    var dx = gx - hH.x, dy = gy - hH.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    var wave = Math.cos(dist * 2.2 - hH.t * 11);
+    var fall = Math.exp(-dist * dist / 2.2);
+    var decay = Math.exp(-hH.t * 1.9);
+    p += hH.amp * fall * decay * (0.55 + 0.45 * wave);
+  }
+  return p;
+}
+
+function netPoint(gx, gy) {
+  return proj(gx, gy, GOAL_Z + NET_DEPTH + netPush(gx, gy));
+}
+
+function drawNet(G) {
+  var col = G.sky === "night" ? "rgba(206,216,236,0.5)" : "rgba(242,246,255,0.58)";
+  var deep = G.sky === "night" ? "rgba(140,153,180,0.2)" : "rgba(190,202,226,0.24)";
+  var gx, gy, i;
+
+  /* back of the net: verticals then horizontals */
+  for (gx = -GOAL_HALF; gx <= GOAL_HALF + 0.001; gx += 0.72) {
+    for (i = 0; i <= 20; i++) {
+      var p = netPoint(gx, (i / 20) * CROSSBAR);
+      pxc(X, Math.round(p.x), Math.round(p.y), 1, 1, col);
+    }
+  }
+  for (gy = 0; gy <= CROSSBAR + 0.001; gy += 0.52) {
+    for (i = 0; i <= 44; i++) {
+      var q = netPoint(-GOAL_HALF + (i / 44) * GOAL_HALF * 2, gy);
+      pxc(X, Math.round(q.x), Math.round(q.y), 1, 1, col);
+    }
+  }
+  /* side nets, sloping back from each post */
+  for (var side = -1; side <= 1; side += 2) {
+    for (i = 0; i <= 6; i++) {
+      var tt = i / 6;
+      for (var k = 0; k <= 7; k++) {
+        var zz = GOAL_Z + tt * NET_DEPTH;
+        var yy = CROSSBAR * (1 - tt * 0.18) * (k / 7);
+        var r = proj(side * GOAL_HALF, yy, zz);
+        pxc(X, Math.round(r.x), Math.round(r.y), 1, 1, deep);
+      }
+    }
+  }
+  /* roof of the net */
+  for (i = 0; i <= 6; i++) {
+    var t2 = i / 6;
+    for (var m = 0; m <= 20; m++) {
+      var rr = proj(-GOAL_HALF + (m / 20) * GOAL_HALF * 2, CROSSBAR * (1 - t2 * 0.18), GOAL_Z + t2 * NET_DEPTH);
+      pxc(X, Math.round(rr.x), Math.round(rr.y), 1, 1, deep);
+    }
+  }
+}
+
+function drawGoalFrame() {
+  var post = proj(0, 0, GOAL_Z);
+  var w = Math.max(2, Math.round(POST_R * 2 * post.s));
+  var baseL = proj(-GOAL_HALF, 0, GOAL_Z), topL = proj(-GOAL_HALF, CROSSBAR, GOAL_Z);
+  var baseR = proj(GOAL_HALF, 0, GOAL_Z), topR = proj(GOAL_HALF, CROSSBAR, GOAL_Z);
+  function bar(x, y, ww, hh) {
+    pxc(X, Math.round(x) - 1, Math.round(y) - 1, Math.round(ww) + 2, Math.round(hh) + 2, "#2b3150");
+    pxc(X, Math.round(x), Math.round(y), Math.round(ww), Math.round(hh), "#f4f8ff");
+    pxc(X, Math.round(x), Math.round(y), Math.max(1, Math.round(ww * 0.34)), Math.round(hh), "#ffffff");
+  }
+  bar(topL.x - w / 2, topL.y, w, baseL.y - topL.y);
+  bar(topR.x - w / 2, topR.y, w, baseR.y - topR.y);
+  bar(topL.x - w / 2, topL.y - w, (topR.x - topL.x) + w, w);
+}
+
+/* ---------------- goal-mouth helpers ---------------- */
+/* Convert a point in the goal mouth to screen space. */
+function mouthToScreen(gx, gy) { return proj(gx, gy, GOAL_Z); }
+/* ============================================================
+   KEEPER'S NIGHTMARE — rules, flight, and the man in the goal
+   ============================================================ */
+
+var GRAV = 10.72;
+var SPREAD_X = 3.2;        /* yards off line at a full miss of the notch */
+var SPREAD_Y = 1.1;
+
+/* ---------------- keepers ----------------
+   react  seconds before he commits
+   speed  yards per second across the goal
+   reach  how far he can get, however long he has
+   grab   radius of the hands, in yards
+   read   how much he uses your tells instead of guessing  */
+/* From the third keeper on, the sight will not hold still: you stop a
+   sweeping line for the side, then another for the height. */
+var SWEPT_FROM = 3;
+
+var KEEPERS = [
+  /* Speed is deliberately short of reach at the top, so a hard shot
+     into the corner still beats him: he knows, but cannot get there. */
+  /* Speeds are set so a corner struck at about three-quarter power is
+     just within reach, and flat out is just beyond it. The ladder is
+     then driven by how well each keeper reads you. */
+  { name: "SUNDAY LEAGUE", react: 0.16, speed: 8.8,  reach: 1.90, grab: 0.55, read: 0.18 },
+  { name: "CLUB",          react: 0.14, speed: 9.6,  reach: 2.20, grab: 0.60, read: 0.37 },
+  { name: "ACADEMY",       react: 0.12, speed: 10.4, reach: 2.50, grab: 0.65, read: 0.53 },
+  { name: "PRO",           react: 0.11, speed: 10.7, reach: 2.75, grab: 0.69, read: 0.67 },
+  { name: "INTERNATIONAL", react: 0.10, speed: 10.9, reach: 2.95, grab: 0.73, read: 0.80 },
+  { name: "WORLD CLASS",   react: 0.09, speed: 11.1, reach: 3.05, grab: 0.77, read: 0.90 },
+  { name: "LEGEND",        react: 0.08, speed: 11.2, reach: 3.15, grab: 0.80, read: 0.96 }
+];
+function sweptAim(G) { return G.tier >= SWEPT_FROM; }
+/* how fast the sights run, in full sweeps per second */
+function sweepSpeed(G) { return 1.25 + Math.max(0, G.tier - SWEPT_FROM) * 0.22; }
+
+/* ---------------- persistence ---------------- */
+var SKEY = "best";
+var GAME = "keepers-nightmare";
+var SAVE_API = "/api/games/saves";
+var store = (function () {
+  var LS = "kn:local:";
+  function lsGet(k) { try { return window.localStorage.getItem(LS + k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(LS + k, v); return true; } catch (e) { return false; } }
+  return {
+    account: null,
+    get: function (k) {
+      var local = lsGet(k);
+      if (typeof fetch !== "function") return Promise.resolve(local);
+      return fetch(SAVE_API + "?game=" + GAME + "&key=" + encodeURIComponent(k), { credentials: "same-origin" })
+        .then(function (r) {
+          if (r.status === 401) { store.account = false; return null; }
+          if (!r.ok) return null;
+          store.account = true; return r.json();
+        })
+        .then(function (j) {
+          var remote = j && j.value != null ? j.value : null;
+          if (remote) { lsSet(k, remote); return remote; }
+          return local;
+        })
+        .catch(function () { return local; });
+    },
+    set: function (k, v) {
+      lsSet(k, v);
+      if (typeof fetch !== "function") return Promise.resolve(true);
+      return fetch(SAVE_API, {
+        method: "PUT", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ game: GAME, key: k, value: v })
+      }).then(function (r) { if (r.status === 401) store.account = false; else store.account = r.ok; return true; })
+        .catch(function () { return true; });
+    }
+  };
+})();
+
+var BEST = {
+  gauntlet: { streak: 0, score: 0, tier: 0 },
+  lives: { score: 0, goals: 0 },
+  rush: { score: 0, goals: 0 },
+  shootout: { wins: 0, played: 0 }
+};
+function saveBest() { try { store.set(SKEY, JSON.stringify(BEST)); } catch (e) { } }
+function loadBest() {
+  return Promise.resolve(store.get(SKEY)).then(function (raw) {
+    if (!raw) return false;
+    try {
+      var o = JSON.parse(raw), m, k;
+      for (m in BEST) if (o[m]) for (k in BEST[m]) if (typeof o[m][k] === "number") BEST[m][k] = o[m][k];
+      return true;
+    } catch (e) { return false; }
+  }).catch(function () { return false; });
+}
+
+/* ---------------- modes ---------------- */
+var MODES = {
+  shootout: {
+    id: "shootout", name: "SHOOTOUT", players: 2,
+    blurb: "TWO PLAYERS, ONE DEVICE. FIVE EACH,\nTHEN SUDDEN DEATH. PASS IT ALONG.",
+    start: function (G) { G.tier = 3; G.round = 1; G.turn = 0; G.sd = false; }
+  },
+  gauntlet: {
+    id: "gauntlet", name: "GAUNTLET", players: 1,
+    blurb: "EVERY GOAL BRINGS ON A BETTER KEEPER.\nONE STOP AND THE RUN IS OVER.",
+    start: function (G) { G.tier = 0; G.lives = 1; }
+  },
+  lives: {
+    id: "lives", name: "THREE LIVES", players: 1,
+    blurb: "THREE STOPS OR MISSES AND YOU'RE DONE.\nCORNERS ARE WORTH THE MOST.",
+    start: function (G) { G.tier = 1; G.lives = 3; }
+  },
+  rush: {
+    id: "rush", name: "60 SECOND RUSH", players: 1,
+    blurb: "SCORE AS MANY AS YOU CAN.\nGOAL +2 SECONDS, STOPPED -3.",
+    start: function (G) { G.tier = 2; G.lives = 1; G.clock = 60; }
+  }
+};
+
+function keeperOf(G) { return KEEPERS[Math.max(0, Math.min(KEEPERS.length - 1, G.tier))]; }
+
+/* ---------------- state ---------------- */
+function newGame(mode) {
+  var G = {
+    mode: mode, phase: "aim", shots: 0, goals: 0, score: 0, streak: 0, bestStreak: 0,
+    lives: 1, clock: 0, tier: 0, seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0,
+    aimX: 0, aimY: 1.1, dwellX: 0, dwellY: 1.1,
+    power: 0, acc: 1, lockedPower: 0, err: 0,
+    ball: null, keeper: null, result: null, resultT: 0, anim: 0, shotT: 0,
+    sky: "night", precip: "none",
+    shake: 0, flash: 0, parts: [], trail: [],
+    history: [],                /* where this player has put it before */
+    /* shootout only */
+    players: null, round: 1, turn: 0, sd: false, pass: false, winner: -1
+  };
+  MODES[mode].start(G);
+  if (MODES[mode].players === 2) {
+    G.players = [
+      { name: "PLAYER 1", kit: 0, taken: [], goals: 0, history: [] },
+      { name: "PLAYER 2", kit: 1, taken: [], goals: 0, history: [] }
+    ];
+  }
+  rollConditions(G);
+  return G;
+}
+function shooter(G) { return G.players ? G.players[G.turn] : null; }
+function shooterHistory(G) { return G.players ? G.players[G.turn].history : G.history; }
+
+var SKIES = ["day", "dusk", "night"];
+function rollConditions(G) {
+  var s = G.seed + G.shots * 7919;
+  if (G.mode === "gauntlet") {
+    G.sky = G.shots < 4 ? "day" : G.shots < 8 ? "dusk" : "night";
+    G.precip = rnd(s + 3) < Math.min(0.5, G.shots * 0.07) ? (rnd(s + 5) < 0.5 ? "rain" : "snow") : "none";
+  } else if (G.mode === "shootout") {
+    G.sky = "night";                      /* shootouts happen under the lights */
+    if (G.precip == null) G.precip = rnd(G.seed + 97) < 0.3 ? "rain" : "none";
+  } else {
+    G.sky = SKIES[Math.floor(rnd(s + 11) * 3)];
+    G.precip = rnd(s + 13) < 0.28 ? (rnd(s + 17) < 0.5 ? "rain" : "snow") : "none";
+  }
+}
+
+/* ---------------- the strike ---------------- */
+function speedFor(p) { return 16 + p * 22; }
+
+function launch(G) {
+  var p = G.lockedPower;
+  var v = speedFor(p);
+  /* Hitting it harder costs placement. */
+  var spread = (1 + p * 0.55);
+  var landX = G.aimX + G.err * SPREAD_X * spread;
+  var landY = G.aimY + G.err * SPREAD_Y * spread * 0.45 + Math.abs(G.err) * 0.28 * spread;
+
+  var t = GOAL_Z / v;
+  var spin = G.err * 1.6 - G.aimX * 0.10;      /* struck across the ball, it bends */
+  var y0 = 0.12;
+  var vy = (landY - y0 + 0.5 * GRAV * t * t) / t;
+  var vx = (landX - 0.5 * spin * t * t) / t;
+
+  G.ball = {
+    x: 0, y: y0, z: 0, vx: vx, vy: vy, vz: v, spin: spin,
+    t: 0, live: true, crossed: false, land: { x: landX, y: landY }, power: p
+  };
+  G.arriveT = t;
+  G.trail = [];
+  setupKeeper(G, landX, landY, t);
+  G.phase = "shot";
+  G.shotT = 0;
+  G.resolved = false;
+}
+
+function stepBall(G, dt) {
+  var b = G.ball;
+  if (!b || !b.live) return;
+  b.vx += b.spin * dt;
+  b.vy -= GRAV * dt;
+  b.x += b.vx * dt;
+  b.y += b.vy * dt;
+  b.z += b.vz * dt;
+  b.t += dt;
+  if (G.keeper) G.keeper.t = b.t;
+
+  if (!b.crossed && b.z >= GOAL_Z) {
+    b.crossed = true;
+    judge(G);
+    var r = G.pending;
+    if (r.goal && !r.woodwork) {
+      netHit(r.x, Math.max(0.1, r.y), b.power);
+      b.vz *= 0.26; b.vx *= 0.3; b.vy = Math.abs(b.vy) * 0.2;
+    } else if (r.kind === "saved") {
+      b.vz *= -0.42; b.vx = (rnd(G.seed + b.t * 1000) - 0.5) * 7; b.vy = 2.2;
+    } else if (r.woodwork) {
+      b.vz *= r.goal ? 0.3 : -0.5;
+      b.vx = (Math.abs(r.x) > 1 ? Math.sign(r.x) : 1) * (r.goal ? -1.5 : 4);
+      b.vy = 1.5;
+      if (r.goal) netHit(r.x * 0.7, Math.max(0.1, r.y * 0.8), b.power * 0.7);
+    }
+  }
+  if (b.y <= 0.08 && b.vy < 0) { b.y = 0.08; b.vy = -b.vy * 0.4; b.vx *= 0.7; b.vz *= 0.7; }
+  if (b.t > 5) b.live = false;
+}
+
+/* ---------------- the keeper decides ---------------- */
+function setupKeeper(G, landX, landY, t) {
+  var K = keeperOf(G);
+  var hist = shooterHistory(G);
+  var s = G.seed + G.shots * 104729;
+
+  /* What he thinks he has seen: where the reticle lived, and where
+     this player has gone before. A late switch beats the read, because
+     the dwell is an average over the whole aim, not the last instant. */
+  /* Mostly he reads where the sight has lived, but he gets one glimpse
+     of it as you strike, so a last-instant switch leaks a little. */
+  /* Mostly he reads where the sight has lived, plus one glimpse as you
+     strike. Against a swept sight there is no dwell to read, so the
+     glimpse is all he gets: harder to place, harder for him to call. */
+  var tell, tellY;
+  if (sweptAim(G)) {
+    /* The locked lines are drawn on the pitch; he can see them too. */
+    tell = G.aimX / GOAL_HALF;
+    tellY = G.aimY / CROSSBAR;
+  } else {
+    tell = (0.74 * G.dwellX + 0.26 * G.aimX) / GOAL_HALF;
+    tellY = (0.74 * G.dwellY + 0.26 * G.aimY) / CROSSBAR;
+  }
+  var histX = 0, histY = 0.5;
+  if (hist.length) {
+    var sx = 0, sy = 0;
+    for (var i = 0; i < hist.length; i++) { sx += hist[i].x; sy += hist[i].y; }
+    histX = (sx / hist.length) / GOAL_HALF;
+    histY = (sy / hist.length) / CROSSBAR;
+  }
+  var noise = rnd(s + 1) * 2 - 1;
+  var noiseY = rnd(s + 2) * 2 - 1;
+
+  var nw = 0.30 + (1 - K.read) * 1.25;    /* even a legend is partly guessing */
+  var hw = hist.length ? 0.30 + Math.min(0.25, hist.length * 0.05) : 0;
+  var belief = K.read * ((1 - hw) * tell + hw * histX) + nw * noise;
+  var beliefY = K.read * (0.62 * tellY + 0.38 * histY) + (0.30 + (1 - K.read) * 0.45) * noiseY;
+
+  /* Standing up is a real option against someone who keeps going middle. */
+  var centreBias = 0;
+  if (hist.length >= 3) {
+    var mid = 0;
+    for (var j = 0; j < hist.length; j++) if (Math.abs(hist[j].x) < 1.2) mid++;
+    centreBias = (mid / hist.length) * K.read;
+  }
+  /* He dives at a spot, not simply to one side. A keeper who thinks it
+     is going just left of centre takes a short step; one who thinks it
+     is going into the corner throws himself. How close that spot is to
+     the truth is what `read` really buys. */
+  var guessX = belief * GOAL_HALF * 0.95;
+  if (guessX > K.reach) guessX = K.reach;
+  if (guessX < -K.reach) guessX = -K.reach;
+  var dir;
+  if (Math.abs(guessX) < 0.4 + centreBias * 1.1 && rnd(s + 3) < 0.22 + centreBias) { dir = 0; guessX = 0; }
+  else dir = guessX < 0 ? -1 : 1;
+
+  var high = beliefY > 0.47 || (dir === 0 && beliefY > 0.40);
+
+  G.keeper = {
+    dir: dir, guessX: guessX, high: high, react: K.react, speed: K.speed,
+    reach: K.reach, grab: K.grab,
+    t: 0, arriveT: t, committed: false, correct: false, saved: false,
+    lean: Math.max(-1, Math.min(1, belief * 0.8)),
+    K: K
+  };
+}
+
+/* Where his hands are at a given moment, and what height band he covers. */
+function keeperHands(kp, time) {
+  var move = Math.max(0, time - kp.react);
+  var reachable = Math.min(kp.reach, kp.speed * move);
+  var target = kp.guessX == null ? kp.dir * kp.reach : kp.guessX;
+  var x = Math.abs(target) <= reachable ? target : (target < 0 ? -reachable : reachable);
+  var prog = kp.reach > 0 ? Math.abs(x) / kp.reach : 0;
+  /* Extension limits how far across he gets, not what height he covers:
+     a keeper at full stretch reaches more, not less. */
+  var lo, hi;
+  if (kp.dir === 0) {
+    lo = kp.high ? 1.10 : 0;
+    hi = kp.high ? CROSSBAR + 0.2 : 1.30;
+  } else {
+    lo = kp.high ? 0.85 : 0;
+    hi = kp.high ? CROSSBAR + 0.1 : 1.35;
+  }
+  return { x: x, lo: lo, hi: hi, prog: prog };
+}
+
+function judge(G) {
+  var b = G.ball, kp = G.keeper;
+  var lx = b.land.x, ly = b.land.y;
+  var r = { kind: "", goal: false, x: lx, y: ly, keeperClose: false };
+
+  /* woodwork first */
+  var nearPost = Math.min(Math.abs(Math.abs(lx) - GOAL_HALF), 99);
+  var nearBar = Math.abs(ly - CROSSBAR);
+  if (ly > 0 && nearPost <= POST_R + 0.1 && ly < CROSSBAR + POST_R) r.kind = "post";
+  else if (nearBar <= POST_R + 0.1 && Math.abs(lx) < GOAL_HALF + POST_R) r.kind = "bar";
+  else if (Math.abs(lx) > GOAL_HALF || ly > CROSSBAR || ly < 0) r.kind = Math.abs(lx) > GOAL_HALF
+    ? (lx < 0 ? "wideleft" : "wideright") : "over";
+
+  if (r.kind === "") {
+    var h = keeperHands(kp, kp.arriveT);
+    var dx = Math.abs(lx - h.x);
+    var inBand = ly >= h.lo - 0.05 && ly <= h.hi + 0.05;
+    /* a trailing leg can still get to a slow ball rolled down the middle */
+    var legs = kp.dir !== 0 && ly < 0.55 && Math.abs(lx) < 0.9 && b.power < 0.45;
+    r.keeperClose = dx < kp.grab + 0.6;
+    kp.correct = (kp.dir === 0 && Math.abs(lx) < 1.2) || (kp.dir !== 0 && Math.sign(lx) === kp.dir);
+    if ((dx <= kp.grab && inBand) || legs) { r.kind = "saved"; kp.saved = true; }
+    else { r.kind = "goal"; r.goal = true; }
+  }
+  if (r.kind === "post" || r.kind === "bar") {
+    /* Off the frame. Whether it goes in is decided by which side of the
+       woodwork it caught, not by a coin toss. */
+    r.woodwork = true;
+    r.goal = r.kind === "post" ? Math.abs(lx) < GOAL_HALF : ly < CROSSBAR;
+    if (r.goal) { r.kind = r.kind === "post" ? "postin" : "barin"; }
+  }
+  G.pending = r;
+  return r;
+}
+
+var RESULT_TEXT = {
+  goal: "GOAL!", saved: "SAVED!", wideleft: "WIDE OF THE POST",
+  wideright: "WIDE OF THE POST", over: "OVER THE BAR",
+  post: "OFF THE POST!", bar: "OFF THE BAR!",
+  postin: "OFF THE POST AND IN!", barin: "OFF THE BAR AND IN!"
+};
+
+function settle(G) {
+  var r = G.pending || { kind: "saved", goal: false };
+  var kp = G.keeper;
+  var perfect = Math.abs(G.err) < 0.045;
+  var pts = 0, notes = [];
+
+  G.shots++;
+  shooterHistory(G).push({ x: r.x, y: r.y });
+  if (shooterHistory(G).length > 8) shooterHistory(G).shift();
+
+  if (r.goal) {
+    G.goals++;
+    G.streak++;
+    if (G.streak > G.bestStreak) G.bestStreak = G.streak;
+    var corner = (Math.abs(r.x) / GOAL_HALF) * 0.6 + (Math.max(0, r.y) / CROSSBAR) * 0.4;
+    pts = 200 + Math.round(corner * 600) + Math.round(G.lockedPower * 200);
+    if (corner > 0.78) notes.push("TOP CORNER");
+    if (perfect) { pts *= 2; notes.push("PERFECT STRIKE  x2"); }
+    if (kp && kp.correct) { pts += 300; notes.push("BEAT HIM ANYWAY  +300"); }
+    if (r.woodwork) { pts += 500; notes.push("OFF THE WOODWORK  +500"); }
+    if (G.streak > 1) { var sb = (G.streak - 1) * 60; pts += sb; notes.push("STREAK " + G.streak + "  +" + sb); }
+    G.score += pts;
+  } else {
+    G.streak = 0;
+  }
+
+  G.result = {
+    goal: r.goal, kind: r.kind, text: RESULT_TEXT[r.kind] || "NO GOAL",
+    pts: pts, notes: notes, perfect: perfect,
+    saved: r.kind === "saved", woodwork: !!r.woodwork
+  };
+  G.resultT = 0;
+  G.phase = "result";
+  applyOutcome(G, r.goal);
+  return G.result;
+}
+
+/* ---------------- what the outcome means for the mode ---------------- */
+function applyOutcome(G, scored) {
+  if (G.mode === "shootout") {
+    var p = G.players[G.turn];
+    p.taken.push(scored);
+    if (scored) p.goals++;
+    return;
+  }
+  if (G.mode === "gauntlet") {
+    if (scored) {
+      var was = G.tier;
+      G.tier = Math.min(KEEPERS.length - 1, G.tier + 1);
+      if (was < SWEPT_FROM && G.tier >= SWEPT_FROM) G.notice = "NO MORE FREE AIM";
+    } else G.lives = 0;
+    return;
+  }
+  if (G.mode === "lives") {
+    if (!scored) G.lives--;
+    else if (G.goals % 3 === 0) G.tier = Math.min(KEEPERS.length - 1, G.tier + 1);
+    return;
+  }
+  if (G.mode === "rush") {
+    G.clock += scored ? 2 : -3;
+    if (G.clock > 75) G.clock = 75;
+    if (scored && G.goals % 4 === 0) G.tier = Math.min(KEEPERS.length - 1, G.tier + 1);
+  }
+}
+
+/* ---------------- shootout bookkeeping ---------------- */
+function shootoutState(G) {
+  var a = G.players[0], b = G.players[1];
+  var ra = 5 - a.taken.length, rb = 5 - b.taken.length;
+  if (!G.sd) {
+    /* decided early when one side cannot be caught */
+    if (a.goals > b.goals + rb) return { over: true, winner: 0 };
+    if (b.goals > a.goals + ra) return { over: true, winner: 1 };
+    if (a.taken.length >= 5 && b.taken.length >= 5) {
+      if (a.goals !== b.goals) return { over: true, winner: a.goals > b.goals ? 0 : 1 };
+      return { over: false, suddenDeath: true };
+    }
+    return { over: false };
+  }
+  /* sudden death: both have taken an equal number and one has missed */
+  if (a.taken.length === b.taken.length && a.taken.length > 5) {
+    var la = a.taken[a.taken.length - 1], lb = b.taken[b.taken.length - 1];
+    if (la !== lb) return { over: true, winner: la ? 0 : 1 };
+  }
+  return { over: false };
+}
+
+function advanceShootout(G) {
+  var st = shootoutState(G);
+  if (st.suddenDeath) G.sd = true;
+  if (st.over) { G.winner = st.winner; return true; }
+  G.turn = G.turn === 0 ? 1 : 0;
+  G.round = Math.min(G.players[0].taken.length, G.players[1].taken.length) + 1;
+  G.pass = true;
+  return false;
+}
+
+function runOver(G) {
+  if (G.mode === "shootout") return G.winner >= 0;
+  if (G.mode === "rush") return G.clock <= 0;
+  return G.lives <= 0;
+}
+
+function recordBest(G) {
+  var improved = false;
+  if (G.mode === "gauntlet") {
+    if (G.bestStreak > BEST.gauntlet.streak) { BEST.gauntlet.streak = G.bestStreak; improved = true; }
+    if (G.score > BEST.gauntlet.score) { BEST.gauntlet.score = G.score; improved = true; }
+    if (G.tier > BEST.gauntlet.tier) { BEST.gauntlet.tier = G.tier; improved = true; }
+  } else if (G.mode === "shootout") {
+    BEST.shootout.played++;
+    improved = true;
+  } else {
+    var b = BEST[G.mode];
+    if (G.score > b.score) { b.score = G.score; improved = true; }
+    if (G.goals > b.goals) { b.goals = G.goals; improved = true; }
+  }
+  if (improved) saveBest();
+  return improved;
+}
+
+var SWEEP_X = GOAL_HALF + 0.55;     /* the sight runs past the posts */
+var SWEEP_Y = CROSSBAR + 0.45;      /* and over the bar */
+
+function nextShot(G) {
+  rollConditions(G);
+  var swept = sweptAim(G);
+  G.swept = swept;
+  G.aimX = 0; G.aimY = swept ? 0 : 1.1;
+  G.sx = -1; G.sxDir = 1; G.sy = 0; G.syDir = 1;
+  G.dwellX = 0; G.dwellY = 1.1; G.dwellN = 0;
+  G.power = 0; G.acc = 1; G.lockedPower = 0; G.err = 0;
+  G.ball = null; G.keeper = null; G.pending = null; G.result = null;
+  G.trail = []; G.resolved = false; G.settleT = null;
+  netReset();
+  G.phase = swept ? "aimx" : "aim";
+  G.anim = 0;
+}
+/* ============================================================
+   KEEPER'S NIGHTMARE — figures, interface, loop
+   ============================================================ */
+
+var PANEL_Y = 140;
+var UIst = { t: 0 };
+
+/* ---------------- the taker ---------------- */
+function drawTaker(G) {
+  if (G.phase === "result") return;      /* the banner owns that space */
+  var spot = proj(0, 0, 0);
+  var frame = 0;
+  if (G.phase === "aim" || G.phase === "aimx" || G.phase === "aimy") frame = 0;
+  else if (G.phase === "power") frame = 1;
+  else if (G.phase === "accuracy") frame = 2;
+  else if (G.phase === "shot") frame = G.shotT < 0.08 ? 3 : 4;
+  else frame = 4;
+  var kit = G.players ? KITS[G.players[G.turn].kit] : KITS[0];
+  /* Drawn big and low, as a foreground figure the panel crops, rather
+     than at true scale, which from this close would fill the screen. */
+  drawSprite(TAKER[frame], Math.round(spot.x) - 76, Math.round(spot.y) - 50, kitPal(kit), false, 3);
+}
+
+function drawSpotBall(G) {
+  if (G.phase === "shot" || G.phase === "result") return;
+  var spot = proj(0, 0, 0);
+  X.globalAlpha = 0.38;
+  pxc(X, Math.round(spot.x) - 9, Math.round(spot.y) - 1, 18, 5, "#12290f");
+  X.globalAlpha = 1;
+  drawSprite(SBALL_BIG, Math.round(spot.x) - 10, Math.round(spot.y) - 19, ballPal(), false, 2);
+}
+
+/* ---------------- the keeper ---------------- */
+function drawKeeper(G) {
+  var kp = G.keeper;
+  var ground = proj(0, 0, GOAL_Z);
+  var sc = 2;
+
+  if (!kp || G.phase === "aim" || G.phase === "aimx" || G.phase === "aimy"
+      || G.phase === "power" || G.phase === "accuracy") {
+    /* Set, with a lean that shows what he thinks is coming. He only
+       starts shading once you have been pointing somewhere a while. */
+    var lean = 0;
+    if (G.dwellN > 14) lean = Math.max(-1, Math.min(1, (G.dwellX / GOAL_HALF) * 1.3)) * readOf(G);
+    var sprite = Math.abs(lean) > 0.28 ? KEEPER_LEAN : KEEPER_SET;
+    var flip = lean > 0;
+    var bob = Math.sin(G.anim * 3.4) * 1;
+    var px0 = Math.round(ground.x - 15 + lean * 7);
+    drawSprite(sprite, px0, Math.round(ground.y + bob) - 32, keeperPal(), flip, sc);
+    return;
+  }
+
+  var beaten = G.phase === "result" && G.result && G.result.goal;
+  var t = Math.min(kp.t, kp.arriveT + 0.22);
+  var h = keeperHands(kp, t);
+
+  if (kp.dir === 0) {
+    var sp = beaten ? KEEPER_SET : (kp.high ? KEEPER_HIGH : KEEPER_LOW);
+    var lift = kp.high ? Math.round(h.prog * 4) : 0;
+    drawSprite(sp, Math.round(ground.x - 15), Math.round(ground.y) - 32 - lift, keeperPal(), false, sc);
+    return;
+  }
+
+  var dive = beaten ? KEEPER_BEATEN : (kp.high ? KEEPER_DIVE_HIGH : KEEPER_DIVE_LOW);
+  var wid = dive[0].length * sc;
+  var bandY = kp.high ? 1.55 : 0.5;
+  var hand = proj(h.x, bandY, GOAL_Z);
+  var flipD = kp.dir > 0;
+  var ox = flipD ? Math.round(hand.x) - wid + 4 : Math.round(hand.x) - 4;
+  var oy = Math.round(hand.y) - 4;
+  /* keep him off the roof of the goal */
+  var topLimit = Math.round(proj(0, CROSSBAR, GOAL_Z).y) - 2;
+  if (oy < topLimit) oy = topLimit;
+  drawSprite(dive, ox, oy, keeperPal(), flipD, sc);
+}
+function readOf(G) { return keeperOf(G).read; }
+
+/* ---------------- the ball ---------------- */
+function drawBall(G) {
+  var b = G.ball;
+  if (!b) return;
+  var i;
+  for (i = 0; i < G.trail.length; i++) {
+    var tr = G.trail[i], a = (i + 1) / G.trail.length;
+    var pt = proj(tr.x, tr.y, tr.z);
+    if (pt.y < 0 || pt.y > H) continue;
+    X.globalAlpha = a * 0.5;
+    var ts = Math.max(1, Math.round(pt.s * 0.035));
+    pxc(X, Math.round(pt.x - ts / 2), Math.round(pt.y - ts / 2), ts, ts, "#eef3ff");
+    X.globalAlpha = 1;
+  }
+  var sh = proj(b.x, 0, b.z);
+  if (b.y > 0.12 && sh.y > HORIZON && sh.y < H) {
+    X.globalAlpha = Math.max(0.1, 0.42 - b.y * 0.1);
+    var sw = Math.max(1, Math.round(sh.s * 0.16));
+    pxc(X, Math.round(sh.x - sw / 2), Math.round(sh.y), sw, Math.max(1, Math.round(sw * 0.5)), "#12290f");
+    X.globalAlpha = 1;
+  }
+  var p = proj(b.x, b.y, b.z);
+  if (p.y < -16 || p.y > H + 16) return;
+  var size = Math.max(3, p.s * 0.26);
+  if (size >= 14) drawSprite(SBALL_BIG, Math.round(p.x - 10), Math.round(p.y - 10), ballPal(), false, 2);
+  else if (size >= 7) drawSprite(SBALL_BIG, Math.round(p.x - 5), Math.round(p.y - 5), ballPal(), false, 1);
+  else if (size >= 4) drawSprite(SBALL_MID, Math.round(p.x - 2.5), Math.round(p.y - 2.5), ballPal(), false, 1);
+  else {
+    var s2 = Math.max(3, Math.round(size));
+    pxc(X, Math.round(p.x - s2 / 2) - 1, Math.round(p.y - s2 / 2) - 1, s2 + 2, s2 + 2, "#141a2e");
+    pxc(X, Math.round(p.x - s2 / 2), Math.round(p.y - s2 / 2), s2, s2, "#f6f9ff");
+    pxc(X, Math.round(p.x), Math.round(p.y), 1, 1, "#1b2338");
+  }
+}
+
+/* ---------------- the sight ---------------- */
+function drawReticle(G) {
+  var ph = G.phase;
+  if (ph !== "aim" && ph !== "aimx" && ph !== "aimy" && ph !== "power" && ph !== "accuracy") return;
+
+  /* While a sweep is running, show the runaway line it belongs to. */
+  if (ph === "aimx" || ph === "aimy" || (G.swept && (ph === "power" || ph === "accuracy"))) {
+    var top = mouthToScreen(G.aimX, CROSSBAR + 0.7);
+    var bot = mouthToScreen(G.aimX, -0.25);
+    var lockedX = ph !== "aimx";
+    for (var yy = Math.round(top.y); yy < Math.round(bot.y); yy += lockedX ? 1 : 2)
+      pxc(X, Math.round(top.x), yy, 1, 1, lockedX ? "rgba(90,212,106,0.75)" : "rgba(255,212,71,0.85)");
+    if (ph === "aimy" || (G.swept && ph !== "aimx")) {
+      var lft = mouthToScreen(-GOAL_HALF - 0.9, G.aimY);
+      var rgt = mouthToScreen(GOAL_HALF + 0.9, G.aimY);
+      var lockedY = ph !== "aimy";
+      for (var xx = Math.round(lft.x); xx < Math.round(rgt.x); xx += lockedY ? 1 : 2)
+        pxc(X, xx, Math.round(lft.y), 1, 1, lockedY ? "rgba(90,212,106,0.75)" : "rgba(255,212,71,0.85)");
+    }
+    if (ph === "aimx") return;        /* no crosshair until the height exists */
+  }
+
+  var p = mouthToScreen(G.aimX, G.aimY);
+  var blink = (G.phase === "aim" || G.phase === "aimy") ? (Math.floor(G.anim * 10) % 2 === 0) : true;
+  var col = blink ? "#ffd447" : "#b8912a";
+  var x = Math.round(p.x), y = Math.round(p.y);
+  var r = 8, a = 5;
+  /* corner brackets with a dark backing, so it reads against the net */
+  function tick(dx, dy, sx, sy) {
+    pxc(X, x + dx - 1, y + dy - 1, sx * a + 2, 3, "#2a1f00");
+    pxc(X, x + dx - 1, y + dy - 1, 3, sy * a + 2, "#2a1f00");
+    pxc(X, x + dx, y + dy, sx * a, 1, col);
+    pxc(X, x + dx, y + dy, 1, sy * a, col);
+  }
+  tick(-r, -r, 1, 1); tick(r, -r, -1, 1);
+  tick(-r, r, 1, -1); tick(r, r, -1, -1);
+  pxc(X, x - 2, y - 2, 4, 4, "#2a1f00");
+  pxc(X, x - 1, y - 1, 2, 2, col);
+  /* a faint line down to the line, to read the height */
+  var foot = mouthToScreen(G.aimX, 0);
+  for (var i = y + 8; i < foot.y; i += 4) pxc(X, x, i, 1, 2, "rgba(255,212,71,0.3)");
+}
+
+/* ---------------- weather ---------------- */
+var drops = [];
+function stepWeather(G, dt) {
+  if (G.precip === "none") { drops.length = 0; return; }
+  var want = G.precip === "rain" ? 95 : 70;
+  while (drops.length < want) drops.push({ x: Math.random() * W, y: Math.random() * H, v: G.precip === "rain" ? 230 + Math.random() * 120 : 24 + Math.random() * 20, w: Math.random() });
+  for (var i = 0; i < drops.length; i++) {
+    var dd = drops[i];
+    dd.y += dd.v * dt;
+    dd.x += (G.precip === "snow" ? Math.sin(G.anim * 2 + dd.w * 6) * 8 : -6) * dt;
+    if (dd.y > PANEL_Y) { dd.y = -4; dd.x = Math.random() * W; }
+  }
+}
+function drawWeather(G) {
+  if (G.precip === "none") return;
+  X.save(); X.beginPath(); X.rect(0, 0, W, PANEL_Y); X.clip();
+  for (var i = 0; i < drops.length; i++) {
+    X.globalAlpha = G.precip === "rain" ? 0.4 : 0.8;
+    pxc(X, drops[i].x, drops[i].y, 1, G.precip === "rain" ? 4 : 1, G.precip === "rain" ? "#9fc4ef" : "#eaf2ff");
+    X.globalAlpha = 1;
+  }
+  X.restore();
+}
+
+/* ---------------- particles ---------------- */
+function burst(G, x, y, n, colors, spread, life) {
+  for (var i = 0; i < n; i++) G.parts.push({
+    x: x, y: y, vx: (Math.random() * 2 - 1) * spread, vy: (Math.random() * 2 - 1) * spread - spread * 0.4,
+    g: 120 + Math.random() * 90, t: 0, life: life || (0.5 + Math.random() * 0.6),
+    c: colors[Math.floor(Math.random() * colors.length)]
+  });
+}
+function stepParts(G, dt) {
+  for (var i = G.parts.length - 1; i >= 0; i--) {
+    var p = G.parts[i];
+    p.t += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.t > p.life) G.parts.splice(i, 1);
+  }
+}
+function drawParts(G) {
+  for (var i = 0; i < G.parts.length; i++) {
+    var p = G.parts[i];
+    X.globalAlpha = Math.max(0, 1 - p.t / p.life);
+    pxc(X, p.x, p.y, 2, 2, p.c);
+    X.globalAlpha = 1;
+  }
+}
+
+/* ---------------- HUD ---------------- */
+var HUD_H = 22;
+function drawHud(G) {
+  HUD_H = G.mode === "shootout" ? 32 : 22;
+  pxc(X, 0, 0, W, HUD_H, "rgba(5,7,15,0.86)");
+  pxc(X, 0, HUD_H, W, 1, "#39405e");
+  textAt(MODES[G.mode].name, 4, 2, "#ffd447", 1, 1);
+
+  if (G.mode === "shootout") {
+    textCenter(G.players[G.turn].name + " TO SHOOT", 160, 2,
+      G.turn === 0 ? "#ff8a7a" : "#8ab4ff", 1, 1);
+    var rt = G.sd ? "SUDDEN DEATH" : "ROUND " + G.round;
+    textAt(rt, W - 4 - textWidth(rt, 1, 1), 2, G.sd ? "#ef5f5f" : "#8d9ac2", 1, 1);
+    textAt(keeperOf(G).name, 62, 2, "#5ad46a", 1, 1);
+    return;
+  }
+  if (false) {
+    textCenter("SCORE " + G.score, 160, 2, "#e8ecf7", 1, 1);
+    var right = G.mode === "gauntlet" ? "STREAK " + G.streak
+      : G.mode === "rush" ? "TIME " + Math.max(0, Math.ceil(G.clock)) : "";
+    if (right) textAt(right, W - 4 - textWidth(right, 1, 1), 2, "#cfd8ef", 1, 1);
+    if (G.mode === "lives") for (var i = 0; i < 3; i++)
+      drawSprite(SBALL_MID, W - 10 - i * 8, 2, i < G.lives
+        ? { ".": null, "#": "#cfd8e8", w: "#f6f9ff", k: "#1b2338" }
+        : { ".": null, "#": "#2b3150", w: "#39405e", k: "#1b2338" }, false, 1);
+  }
+
+  /* Second row: who is in goal, and what he is made of. Keeping it in
+     the bar means it can never sit on top of the crossbar. */
+  var K = keeperOf(G);
+  var kx = G.mode === "shootout" ? 74 : 4;
+  textAt(K.name, kx, 12, "#5ad46a", 1, 1);
+  var bx = kx + textWidth(K.name, 1, 1) + 8;
+  textAt("REACH", bx, 12, "#5a6480", 1, 1);
+  miniBar(bx + 32, 12, 22, (K.reach - 1.6) / 1.6);
+  textAt("READ", bx + 60, 12, "#5a6480", 1, 1);
+  miniBar(bx + 86, 12, 22, K.read);
+}
+function miniBar(x, y, w, f) {
+  pxc(X, x, y, w, 5, "#141a2e");
+  pxc(X, x, y, Math.max(1, Math.round(w * Math.max(0, Math.min(1, f)))), 5, "#5ad46a");
+  pxc(X, x, y, w, 1, "rgba(255,255,255,0.12)");
+}
+
+/* ---------------- shootout board ---------------- */
+function drawBoard(G) {
+  if (G.mode !== "shootout") return;
+  var x0 = 8, y0 = 12;
+  for (var pi = 0; pi < 2; pi++) {
+    var p = G.players[pi], y = y0 + pi * 11;
+    var active = G.turn === pi;
+    textAt(p.name, x0, y, active ? (pi === 0 ? "#ff8a7a" : "#8ab4ff") : "#6b769b", 1, 1);
+    for (var i = 0; i < Math.max(5, p.taken.length); i++) {
+      var cx = x0 + 54 + i * 8, res = p.taken[i];
+      if (res === true) { pxc(X, cx, y, 6, 6, "#1d4a28"); pxc(X, cx + 1, y + 1, 4, 4, "#5ad46a"); }
+      else if (res === false) {
+        pxc(X, cx, y, 6, 6, "#4a1d1d");
+        pxc(X, cx + 1, y + 1, 1, 1, "#ef5f5f"); pxc(X, cx + 4, y + 1, 1, 1, "#ef5f5f");
+        pxc(X, cx + 2, y + 2, 2, 2, "#ef5f5f");
+        pxc(X, cx + 1, y + 4, 1, 1, "#ef5f5f"); pxc(X, cx + 4, y + 4, 1, 1, "#ef5f5f");
+      } else { pxc(X, cx, y, 6, 6, "#20263d"); pxc(X, cx + 1, y + 1, 4, 4, "#141a2e"); }
+    }
+    if (active) pxc(X, x0 - 4, y - 1, 2, 8, pi === 0 ? "#ff8a7a" : "#8ab4ff");
+    textAt(String(p.goals), x0 + 136, y, active ? "#ffd447" : "#cfd8ef", 1, 1);
+  }
+}
+
+/* ---------------- meters ---------------- */
+var BAR_X = 108, BAR_W = 204;
+function drawMeters(G) {
+  var show = G.phase === "aim" || G.phase === "aimx" || G.phase === "aimy"
+    || G.phase === "power" || G.phase === "accuracy" || G.phase === "shot" || G.phase === "result";
+  if (!show) return;
+  var py = PANEL_Y + 6, ay = PANEL_Y + 22;
+
+  pxc(X, 0, PANEL_Y, W, H - PANEL_Y, "#0a0e1e");
+  pxc(X, 0, PANEL_Y, W, 1, "#39405e");
+  pxc(X, 0, PANEL_Y + 1, W, 1, "#161c33");
+
+  /* Where you are putting it, stacked so it cannot run into the bars. */
+  var side = G.aimX < -1.4 ? "LEFT" : G.aimX > 1.4 ? "RIGHT" : "MIDDLE";
+  var hgt = G.aimY > 1.75 ? "HIGH" : G.aimY > 0.85 ? "MID" : "LOW";
+  var pending = G.phase === "aimx";
+  textAt(pending ? "----" : hgt, 6, PANEL_Y + 3, pending ? "#3f4760" : "#f2f6ff", 2, 1);
+  textAt(side, 6, PANEL_Y + 16, G.phase === "aimx" ? "#ffd447" : "#f2f6ff", 2, 1);
+  var risk = cornerRisk(G);
+  textAt(pending ? "SWEEPING" : risk.label, 6, PANEL_Y + 31, pending ? "#ffd447" : risk.col, 1, 1);
+
+  textAt("PWR", 86, py + 1, "#8d9ac2", 1, 1);
+  pxc(X, BAR_X - 1, py - 1, BAR_W + 2, 11, "#05070f");
+  pxc(X, BAR_X, py, BAR_W, 9, "#141a2e");
+  var fill = G.phase === "power" ? G.power : G.lockedPower;
+  if (G.phase === "aim" || G.phase === "aimx" || G.phase === "aimy") fill = 0;
+  pxc(X, BAR_X + Math.round(0.58 * BAR_W), py, Math.round(0.2 * BAR_W), 9, "#1d4a28");
+  var fc = fill < 0.3 ? "#9fadd4" : fill <= 0.78 ? "#5ad46a" : "#ffd447";
+  pxc(X, BAR_X, py, Math.round(fill * BAR_W), 9, fc);
+  pxc(X, BAR_X, py, Math.round(fill * BAR_W), 2, "rgba(255,255,255,0.28)");
+  if (G.phase === "power") pxc(X, BAR_X + Math.round(G.power * BAR_W) - 1, py - 2, 3, 13, "#ffffff");
+  pxc(X, BAR_X - 1, py - 1, BAR_W + 2, 1, "#39405e");
+  pxc(X, BAR_X - 1, py + 9, BAR_W + 2, 1, "#39405e");
+
+  if (G.phase !== "accuracy" && G.phase !== "shot" && G.phase !== "result") return;
+  textAt("ACC", 86, ay + 1, "#8d9ac2", 1, 1);
+  pxc(X, BAR_X - 1, ay - 1, BAR_W + 2, 11, "#05070f");
+  pxc(X, BAR_X, ay, BAR_W, 9, "#141a2e");
+  var mid = BAR_X + BAR_W / 2;
+  pxc(X, Math.round(mid - BAR_W * 0.085), ay, Math.round(BAR_W * 0.17), 9, "#3a3418");
+  pxc(X, Math.round(mid - BAR_W * 0.0225), ay, Math.max(2, Math.round(BAR_W * 0.045)), 9, "#1d4a28");
+  pxc(X, Math.round(mid), ay - 3, 1, 15, "#ffffff");
+  for (var t = -4; t <= 4; t++) if (t) pxc(X, Math.round(mid + t * BAR_W * 0.105), ay + 7, 1, 2, "#39405e");
+  var cur = G.phase === "accuracy" ? G.acc : G.err;
+  var acx = Math.round(mid + cur * (BAR_W / 2));
+  pxc(X, acx - 1, ay - 2, 3, 13, G.phase === "accuracy" ? "#ffffff" : (Math.abs(G.err) < 0.045 ? "#5ad46a" : "#ff9a3c"));
+  pxc(X, BAR_X - 1, ay - 1, BAR_W + 2, 1, "#39405e");
+  pxc(X, BAR_X - 1, ay + 9, BAR_W + 2, 1, "#39405e");
+}
+
+/* How punishing the current aim is, in words rather than numbers. */
+function cornerRisk(G) {
+  var marginX = GOAL_HALF - Math.abs(G.aimX);
+  var marginY = CROSSBAR - G.aimY;
+  var m = Math.min(marginX, marginY * 1.4);
+  if (m < 0.45) return { label: "RISKY", col: "#ef5f5f" };
+  if (m < 1.0) return { label: "TIGHT", col: "#ff9a3c" };
+  if (Math.abs(G.aimX) < 1.0) return { label: "CENTRAL", col: "#9fadd4" };
+  return { label: "SAFE", col: "#5ad46a" };
+}
+
+function drawPrompt(G) {
+  var t = null;
+  if (G.phase === "aim") t = "PLACE IT, THEN PRESS";
+  else if (G.phase === "aimx") t = "STOP IT FOR THE SIDE";
+  else if (G.phase === "aimy") t = "NOW STOP THE HEIGHT";
+  else if (G.phase === "power") t = "PRESS FOR POWER";
+  else if (G.phase === "accuracy") t = "PRESS ON THE NOTCH";
+  if (!t) return;
+  var on = (G.phase !== "aim" && G.phase !== "aimx") || Math.floor(G.anim * 2) % 2 === 0;
+  textAt(t, W - 4 - textWidth(t, 1, 1), PANEL_Y + 32, on ? "#9fadd4" : "#4e5775", 1, 1);
+}
+
+/* ---------------- banner ---------------- */
+function drawBanner(G) {
+  if (G.phase !== "result" || !G.result) return;
+  var r = G.result, t = G.resultT;
+  var slide = Math.min(1, t / 0.13);
+  var y = Math.round(92 + (1 - slide) * -40);
+  var col = r.goal ? "#5ad46a" : "#ef5f5f";
+  pxc(X, 0, y - 6, W, 24, "rgba(5,7,15,0.86)");
+  pxc(X, 0, y - 6, W, 1, col);
+  pxc(X, 0, y + 17, W, 1, col);
+  textCenterShadow(r.text, 160, y, col, "#05070f", 2, 1);
+  if (r.goal && r.pts) {
+    textCenter("+" + r.pts, 160, y + 20, "#f2f6ff", 2, 1);
+    /* One line, so the bonuses cannot climb back over the goal, and
+       trimmed from the end until it actually fits across 320 pixels. */
+    if (r.notes.length) {
+      var list = r.notes.slice(), line = list.join("   ");
+      while (list.length > 1 && textWidth(line, 1, 1) > W - 12) {
+        list.pop();
+        line = list.join("   ") + "  +" + (r.notes.length - list.length) + " MORE";
+      }
+      textCenter(line, 160, y + 36, r.perfect ? "#5ad46a" : "#9fadd4", 1, 1);
+    }
+  } else if (r.saved) {
+    textCenter("HE WENT " + (G.keeper.dir === 0 ? "NOWHERE" : G.keeper.dir < 0 ? "TO HIS RIGHT" : "TO HIS LEFT"),
+      160, y + 20, "#9fadd4", 1, 1);
+  }
+  if (t > 1.0) textAt("PRESS TO CONTINUE", W - 4 - textWidth("PRESS TO CONTINUE", 1, 1), PANEL_Y + 32, (Math.floor(t * 2) % 2 ? "#9fadd4" : "#5d678c"), 1, 1);
+}
+
+/* ---------------- pass the device ---------------- */
+function drawPass(G) {
+  pxc(X, 0, 0, W, H, "rgba(5,7,15,0.93)");
+  var p = G.players[G.turn];
+  textCenterShadow("PASS THE DEVICE", 160, 44, "#ffd447", "#7a4b00", 2, 1);
+  textCenter(p.name + " IS UP", 160, 72, p.kit === 0 ? "#ff8a7a" : "#8ab4ff", 3, 1);
+  var a = G.players[0], b = G.players[1];
+  textCenter(a.goals + "  –  " + b.goals, 160, 100, "#f2f6ff", 2, 1);
+  if (G.sd) textCenter("SUDDEN DEATH", 160, 116, "#ef5f5f", 1, 1);
+  if (Math.floor(UIst.t * 2) % 2 === 0) textCenter("PRESS WHEN READY", 160, 132, "#9fadd4", 1, 1);
+}
+
+/* ---------------- screens ---------------- */
+var menu = { sel: 0 };
+var MODE_LIST = ["shootout", "gauntlet", "lives", "rush"];
+var menuBg = null;
+
+function drawMenu() {
+  pxc(X, 0, 0, W, H, "#070b1a");
+  if (!menuBg) {
+    renderPitch({ sky: "night", precip: "none" });
+    menuBg = document.createElement("canvas");
+    menuBg.width = W; menuBg.height = H;
+    menuBg.getContext("2d").drawImage(bgCv, 0, 0);
+  }
+  X.globalAlpha = 0.5; X.drawImage(menuBg, 0, 0); X.globalAlpha = 1;
+  pxc(X, 0, 0, W, H, "rgba(7,11,26,0.52)");
+
+  textCenterShadow("KEEPER'S", 160, 10, "#ffd447", "#7a4b00", 3, 1);
+  textCenterShadow("NIGHTMARE", 160, 32, "#ffd447", "#7a4b00", 3, 1);
+  pxc(X, 64, 54, 192, 1, "#39405e");
+
+  for (var i = 0; i < MODE_LIST.length; i++) {
+    var m = MODES[MODE_LIST[i]], y = 58 + i * 28, on = menu.sel === i;
+    pxc(X, 22, y, 276, 26, on ? "#1b2550" : "#101730");
+    pxc(X, 22, y, 3, 26, on ? "#ffd447" : "#39405e");
+    if (on) { pxc(X, 22, y, 276, 1, "#ffd447"); pxc(X, 22, y + 25, 276, 1, "#ffd447"); pxc(X, 295, y, 3, 26, "#ffd447"); }
+    textAt(m.name, 32, y + 3, on ? "#ffd447" : "#cfd8ef", 1, 1);
+    if (m.players === 2) textAt("2P", 32 + textWidth(m.name, 1, 1) + 8, y + 3, "#5ad46a", 1, 1);
+    var lines = m.blurb.split("\n");
+    textAt(lines[0], 32, y + 10, "#8d9ac2", 1, 1);
+    if (lines[1]) textAt(lines[1], 32, y + 17, "#6b769b", 1, 1);
+    var b = BEST[MODE_LIST[i]], bt = "";
+    if (MODE_LIST[i] === "gauntlet") bt = b.streak ? "BEST " + b.streak : "";
+    else if (MODE_LIST[i] === "shootout") bt = b.played ? b.played + " PLAYED" : "";
+    else bt = b.score ? "BEST " + b.score : "";
+    if (bt) textAt(bt, 292 - textWidth(bt, 1, 1), y + 3, "#5ad46a", 1, 1);
+  }
+  if (Math.floor(UIst.t * 2) % 2 === 0)
+    textCenter("↑ ↓ CHOOSE    PRESS TO PLAY", 160, 172, "#9fadd4", 1, 1);
+}
+
+function drawGameOver(G) {
+  pxc(X, 0, 0, W, H, "rgba(5,7,15,0.94)");
+  pxc(X, 0, 0, W, H, "rgba(5,7,15,0.5)");
+  if (G.mode === "shootout") {
+    var wIdx = G.winner, wp = G.players[wIdx];
+    textCenterShadow(wp.name + " WINS", 160, 16, "#ffd447", "#7a4b00", 3, 1);
+    textCenter(G.players[0].goals + "  –  " + G.players[1].goals, 160, 48, "#f2f6ff", 3, 1);
+    for (var pi = 0; pi < 2; pi++) {
+      var p = G.players[pi], y = 86 + pi * 16;
+      textAt(p.name, 60, y, pi === 0 ? "#ff8a7a" : "#8ab4ff", 1, 1);
+      for (var i = 0; i < p.taken.length; i++) {
+        var cx = 130 + i * 9;
+        pxc(X, cx, y - 1, 7, 7, p.taken[i] ? "#1d4a28" : "#4a1d1d");
+        pxc(X, cx + 1, y, 5, 5, p.taken[i] ? "#5ad46a" : "#ef5f5f");
+      }
+    }
+    textCenter("PRESS FOR A REMATCH", 160, 140, "#cfd8ef", 1, 1);
+  } else {
+    textCenterShadow(G.mode === "rush" ? "TIME!" : "STOPPED", 160, 16, "#ffd447", "#7a4b00", 3, 1);
+    var rows = [["GOALS", G.goals + " / " + G.shots], ["BEST STREAK", String(G.bestStreak)],
+                ["KEEPER REACHED", keeperOf(G).name], ["SCORE", String(G.score)]];
+    for (var r = 0; r < rows.length; r++) {
+      var yy = 52 + r * 16;
+      textAt(rows[r][0], 48, yy, "#8d9ac2", 1, 1);
+      textAt(rows[r][1], 272 - textWidth(rows[r][1], r === 3 ? 2 : 1, 1), yy - (r === 3 ? 3 : 0),
+        r === 3 ? "#ffd447" : "#e8ecf7", r === 3 ? 2 : 1, 1);
+    }
+    if (G.newBest && Math.floor(UIst.t * 4) % 2 === 0) textCenter("NEW PERSONAL BEST", 160, 122, "#5ad46a", 1, 1);
+    textCenter("PRESS TO PLAY AGAIN", 160, 140, "#cfd8ef", 1, 1);
+  }
+  textCenter("ESC FOR THE MENU", 160, 154, "#6b769b", 1, 1);
+  drawParts(G);
+}
+
+/* ---------------- loop ---------------- */
+var G = null, view = "menu", last = 0;
+
+function startMode(mode) {
+  G = newGame(mode);
+  renderPitch(G);
+  netReset();
+  view = "play";
+}
+
+function update(dt) {
+  UIst.t += dt;
+  if (!G || view !== "play") { if (G) stepParts(G, dt); return; }
+  G.anim += dt;
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 3.2);
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 4);
+  stepWeather(G, dt);
+  stepParts(G, dt);
+  stepNet(dt);
+
+  if (G.pass) return;
+
+  if (G.mode === "rush" && (G.phase === "aim" || G.phase === "power" || G.phase === "accuracy")) {
+    G.clock -= dt;
+    if (G.clock <= 0) { G.clock = 0; endRun(); return; }
+  }
+
+  if (G.phase === "aim") {
+    var ax = 5.2 * dt, ay = 3.4 * dt;
+    if (keys.left) G.aimX = Math.max(-GOAL_HALF - 0.6, G.aimX - ax);
+    if (keys.right) G.aimX = Math.min(GOAL_HALF + 0.6, G.aimX + ax);
+    if (keys.up) G.aimY = Math.min(CROSSBAR + 0.5, G.aimY + ay);
+    if (keys.down) G.aimY = Math.max(0.05, G.aimY - ay);
+    /* He watches where you keep pointing, not where you end up. */
+    G.dwellX += (G.aimX - G.dwellX) * Math.min(1, dt * 1.1);
+    G.dwellY += (G.aimY - G.dwellY) * Math.min(1, dt * 1.1);
+    G.dwellN = (G.dwellN || 0) + 1;
+  } else if (G.phase === "aimx") {
+    var vx = sweepSpeed(G) * 2 * dt;
+    G.sx += G.sxDir * vx;
+    if (G.sx > 1) { G.sx = 1; G.sxDir = -1; }
+    if (G.sx < -1) { G.sx = -1; G.sxDir = 1; }
+    G.aimX = G.sx * SWEEP_X;
+  } else if (G.phase === "aimy") {
+    var vy = sweepSpeed(G) * 1.35 * dt;
+    G.sy += G.syDir * vy;
+    if (G.sy > 1) { G.sy = 1; G.syDir = -1; }
+    if (G.sy < 0) { G.sy = 0; G.syDir = 1; }
+    G.aimY = G.sy * SWEEP_Y;
+  } else if (G.phase === "power") {
+    G.power += 0.95 * dt;
+    if (G.power >= 1) { G.power = 1; lockPower(); }
+  } else if (G.phase === "accuracy") {
+    var over = Math.max(0, G.lockedPower - 0.78);
+    G.acc -= (1.5 + over * 2.6) * dt;
+    if (G.acc <= -1) { G.acc = -1; lockAccuracy(); }
+  } else if (G.phase === "shot") {
+    G.shotT += dt;
+    /* the whole flight runs slow: a penalty is over in half a second */
+    var slow = G.ball && !G.ball.crossed ? 0.42 : 0.7;
+    var sub = dt * slow, i;
+    for (i = 0; i < 4; i++) stepBall(G, sub / 4);
+    if (G.ball) {
+      G.trail.push({ x: G.ball.x, y: G.ball.y, z: G.ball.z });
+      if (G.trail.length > 22) G.trail.shift();
+    }
+    if (G.pending && !G.resolved) { G.resolved = true; onVerdict(); }
+    if (G.resolved) {
+      G.settleT = (G.settleT || 0) + dt;
+      if (G.settleT > 0.75) { G.settleT = null; settle(G); }
+    }
+  } else if (G.phase === "result") {
+    G.resultT += dt;
+  }
+}
+
+function onVerdict() {
+  var r = G.pending;
+  var p = proj(r.x, Math.max(r.y, 0.1), GOAL_Z);
+  if (r.goal) {
+    G.shake = 1; G.flash = 0.7;
+    burst(G, p.x, p.y, 30, ["#5ad46a", "#ffd447", "#ffffff"], 90, 0.9);
+    cheer = 1;
+  } else if (r.kind === "saved") {
+    G.shake = 0.5;
+    burst(G, p.x, p.y, 14, ["#ffd447", "#f2f6ff"], 70, 0.6);
+    cheer = -1;
+  } else {
+    G.shake = 0.35;
+    burst(G, p.x, p.y, 10, ["#8d9ac2", "#5d678c"], 55, 0.5);
+    cheer = -1;
+  }
+  if (r.woodwork) { G.shake = 1.25; burst(G, p.x, p.y, 20, ["#ffffff", "#ffd447"], 120, 0.7); }
+}
+var cheer = 0;
+
+function lockPower() { G.lockedPower = G.power; G.acc = 1; G.phase = "accuracy"; }
+function lockAccuracy() {
+  G.err = G.acc;
+  G.settleT = null;
+  launch(G);
+}
+
+function endRun() {
+  G.newBest = recordBest(G);
+  if (G.newBest || G.mode === "shootout") burst(G, 160, 26, 60, ["#ffd447", "#5ad46a", "#ffffff", "#ef5f5f", "#3560c8"], 110, 1.6);
+  view = "over";
+}
+
+function press() {
+  if (view === "menu") { startMode(MODE_LIST[menu.sel]); return; }
+  if (view === "over") { startMode(G.mode); return; }
+  if (!G) return;
+  if (G.pass) { G.pass = false; nextShot(G); renderPitch(G); return; }
+  if (G.phase === "aim") { G.power = 0; G.phase = "power"; }
+  else if (G.phase === "aimx") { G.phase = "aimy"; }
+  else if (G.phase === "aimy") { G.power = 0; G.phase = "power"; }
+  else if (G.phase === "power") lockPower();
+  else if (G.phase === "accuracy") lockAccuracy();
+  else if (G.phase === "result") {
+    if (G.resultT < 0.4) return;
+    if (G.mode === "shootout") {
+      if (advanceShootout(G)) { endRun(); return; }
+      return;                          /* the pass screen takes over */
+    }
+    if (runOver(G)) { endRun(); return; }
+    nextShot(G);
+    renderPitch(G);
+  }
+}
+
+/* ---------------- draw ---------------- */
+function draw() {
+  if (view === "menu") { drawMenu(); return; }
+  if (!G) return;
+  var sx = 0, sy = 0;
+  if (G.shake > 0) {
+    sx = Math.round((Math.random() * 2 - 1) * G.shake * 4);
+    sy = Math.round((Math.random() * 2 - 1) * G.shake * 3);
+  }
+  pxc(X, 0, 0, W, H, "#05070f");
+  X.drawImage(bgCv, sx, sy);
+
+  if (cheer > 0 && G.shake > 0.05) {
+    for (var i = 0; i < 90; i++)
+      pxc(X, Math.floor(Math.random() * W) + sx, 43 + Math.floor(Math.random() * 12) + sy, 1, 1,
+        Math.random() < 0.5 ? "#fff6c8" : "#ffffff");
+  }
+
+  X.save(); X.translate(sx, sy);
+  drawNet(G);
+  drawKeeper(G);
+  drawGoalFrame();
+  drawReticle(G);
+  drawBall(G);
+  drawSpotBall(G);
+  drawTaker(G);
+  drawParts(G);
+  X.restore();
+
+  drawWeather(G);
+  if (G.flash > 0) { X.globalAlpha = G.flash * 0.45; pxc(X, 0, 0, W, H, "#ffffff"); X.globalAlpha = 1; }
+
+  if (G.notice) {
+    G.noticeT = (G.noticeT || 0) + 1 / 60;
+    var na = G.noticeT < 2.2 ? 1 : Math.max(0, 1 - (G.noticeT - 2.2) * 2);
+    X.globalAlpha = na;
+    pxc(X, 0, 54, W, 18, "rgba(5,7,15,0.88)");
+    pxc(X, 0, 54, W, 1, "#ef5f5f"); pxc(X, 0, 71, W, 1, "#ef5f5f");
+    textCenterShadow(G.notice, 160, 58, "#ef5f5f", "#05070f", 2, 1);
+    X.globalAlpha = 1;
+    if (G.noticeT > 2.8) { G.notice = null; G.noticeT = 0; }
+  }
+  drawHud(G);
+  if (G.ball && G.ball.live) {
+    var pb = proj(G.ball.x, G.ball.y, G.ball.z);
+    if (pb.y < HUD_H + 6) { X.save(); X.translate(sx, sy); drawBall(G); X.restore(); }
+  }
+  drawBoard(G);
+  if (view !== "over") {
+    drawMeters(G);
+    drawPrompt(G);
+    drawBanner(G);
+    if (G.pass) drawPass(G);
+  } else drawGameOver(G);
+}
+
+function frame(ts) {
+  if (!last) last = ts;
+  var dt = Math.min(0.05, (ts - last) / 1000);
+  last = ts;
+  update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- input ---------------- */
+var keys = { left: false, right: false, up: false, down: false };
+function setKey(e, down) {
+  var k = e.key;
+  if (k === "ArrowLeft" || k === "a" || k === "A") { keys.left = down; e.preventDefault(); }
+  else if (k === "ArrowRight" || k === "d" || k === "D") { keys.right = down; e.preventDefault(); }
+  else if (k === "ArrowUp" || k === "w" || k === "W") { keys.up = down; e.preventDefault(); }
+  else if (k === "ArrowDown" || k === "s" || k === "S") { keys.down = down; e.preventDefault(); }
+}
+window.addEventListener("keydown", function (e) {
+  if (e.repeat && (e.key === " " || e.key === "Enter")) { e.preventDefault(); return; }
+  if (view === "menu") {
+    if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") { menu.sel = (menu.sel + MODE_LIST.length - 1) % MODE_LIST.length; e.preventDefault(); return; }
+    if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") { menu.sel = (menu.sel + 1) % MODE_LIST.length; e.preventDefault(); return; }
+  }
+  if (e.key === "Escape") { view = "menu"; e.preventDefault(); return; }
+  if (e.key === " " || e.key === "Enter") { press(); e.preventDefault(); return; }
+  setKey(e, true);
+});
+window.addEventListener("keyup", function (e) { setKey(e, false); });
+
+/* Tap to advance; drag while aiming to place the shot. */
+var ptr = { down: false, moved: 0, t0: 0 };
+CV.addEventListener("pointerdown", function (e) {
+  try { window.focus(); } catch (err) { }
+  ptr.down = true; ptr.moved = 0; ptr.t0 = Date.now();
+  if (view === "menu") {
+    var r = CV.getBoundingClientRect();
+    var yy = (e.clientY - r.top) / r.height * H;
+    var idx = Math.floor((yy - 58) / 28);
+    if (idx >= 0 && idx < MODE_LIST.length) menu.sel = idx;
+  }
+  e.preventDefault();
+});
+CV.addEventListener("pointermove", function (e) {
+  if (!ptr.down) return;
+  ptr.moved += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+  if (G && view === "play" && !G.pass && G.phase === "aim") {
+    var r = CV.getBoundingClientRect();
+    var cx = (e.clientX - r.left) / r.width * W;
+    var cy = (e.clientY - r.top) / r.height * H;
+    var line = proj(0, 0, GOAL_Z);
+    G.aimX = Math.max(-GOAL_HALF - 0.6, Math.min(GOAL_HALF + 0.6, (cx - 160) / line.s));
+    G.aimY = Math.max(0.05, Math.min(CROSSBAR + 0.5, CAMY + (HORIZON - cy) / line.s));
+  }
+  e.preventDefault();
+});
+function endPointer(e) {
+  if (!ptr.down) return;
+  ptr.down = false;
+  if (ptr.moved < 6 || Date.now() - ptr.t0 < 260) press();
+  if (e) e.preventDefault();
+}
+CV.addEventListener("pointerup", endPointer);
+CV.addEventListener("pointercancel", function () { ptr.down = false; });
+
+function holdButton(id, side) {
+  var b = document.getElementById(id);
+  if (!b) return;
+  var set = function (v) { return function (e) { keys[side] = v; b.classList.toggle("hot", v); e.preventDefault(); }; };
+  b.addEventListener("pointerdown", set(true));
+  b.addEventListener("pointerup", set(false));
+  b.addEventListener("pointerleave", set(false));
+  b.addEventListener("pointercancel", set(false));
+}
+holdButton("kL", "left"); holdButton("kR", "right");
+holdButton("kU", "up"); holdButton("kD", "down");
+document.getElementById("kA").addEventListener("pointerdown", function (e) { press(); e.preventDefault(); });
+document.getElementById("kM").addEventListener("click", function () { document.body.classList.toggle("flat"); });
+
+function fit() {
+  var sw = Math.max(1, window.innerWidth - 40), sh = Math.max(1, window.innerHeight - 104);
+  var s = Math.max(1, Math.min(Math.floor(sw / W), Math.floor(sh / H)));
+  CV.style.width = (W * s) + "px";
+  CV.style.height = (H * s) + "px";
+}
+window.addEventListener("resize", fit);
+
+fit();
+Promise.resolve(loadBest()).catch(function () { }).then(function () { requestAnimationFrame(frame); });
+</script>
+</body>
+</html>
