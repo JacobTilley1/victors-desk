@@ -57,6 +57,14 @@ const GAMES = [
     tag: 'Arcade · 2P',
   },
   {
+    slug: 'upper-deck',
+    name: 'Upper Deck',
+    kicker: 'Retro home run derby',
+    blurb:
+      'Put the hitting sight where you think it is going, load up as he winds, and let go as it reaches the plate. Seven pitchers, five pitches, a real count, and four modes including a two-player derby.',
+    tag: 'Arcade · 2P',
+  },
+  {
     slug: 'gridiron-dynasty',
     name: 'Gridiron Dynasty',
     kicker: 'College football coach sim',

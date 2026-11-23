@@ -58,6 +58,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/games/sports-empire`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
     { url: `${SITE_URL}/games/split-the-uprights`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
     { url: `${SITE_URL}/games/keepers-nightmare`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
+    { url: `${SITE_URL}/games/upper-deck`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
     // The daily game itself, not the archive — individual puzzle pages are
     // noindex on purpose, since hundreds of near-identical game screens are
     // exactly the thin-content pattern to stay away from.

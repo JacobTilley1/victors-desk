@@ -1,0 +1,1868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>UPPER DECK</title>
+<style>
+/* ============================================================
+   UPPER DECK — a 320x180 pixel home run derby.
+   One low-resolution canvas scaled up by a whole number, so
+   every pixel stays square.
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#07090d}
+body{
+  display:flex;align-items:center;justify-content:center;
+  font-family:ui-monospace,"Cascadia Mono","Segoe UI Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;
+  color:#d6dcc8;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:none;
+  user-select:none;-webkit-user-select:none;
+}
+#wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px}
+#cab{
+  position:relative;padding:10px;
+  background:linear-gradient(#1d1810,#0f0d09);
+  border:2px solid #4a3a22;
+  box-shadow:0 0 0 2px #07090d, 0 16px 40px rgba(0,0,0,.6);
+}
+#cab::before{content:"";position:absolute;inset:4px;border:1px solid #382c1a;pointer-events:none}
+canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;background:#0b1020;cursor:crosshair;touch-action:none}
+#scan{
+  position:absolute;inset:10px;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,
+    rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.17) 3px, rgba(0,0,0,.17) 4px);
+  mix-blend-mode:multiply;
+}
+body.flat #scan{display:none}
+
+#pad{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
+.key{
+  font:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  background:#241c10;color:#d6dcc8;border:2px solid #4f3e23;
+  padding:7px 12px;cursor:pointer;min-width:42px;
+}
+.key:active,.key.hot{background:#4a3a1c;border-color:#f0c04a;color:#f0c04a}
+.key.wide{min-width:140px}
+#dpad{display:grid;grid-template-columns:repeat(3,42px);grid-template-rows:repeat(2,30px);gap:4px}
+#dpad .key{min-width:0;padding:4px 0;text-align:center}
+#kU{grid-column:2;grid-row:1}
+#kL{grid-column:1;grid-row:2}
+#kD{grid-column:2;grid-row:2}
+#kR{grid-column:3;grid-row:2}
+#hint{font-size:10.5px;letter-spacing:.1em;color:#8a8160;text-align:center;line-height:1.7;max-width:640px}
+#hint b{color:#c6bc90;font-weight:400}
+@media (max-width:640px){ #hint{display:none} }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="cab">
+    <canvas id="c" width="320" height="180"></canvas>
+    <div id="scan"></div>
+  </div>
+  <div id="pad">
+    <div id="dpad">
+      <button class="key" id="kU" aria-label="Move the sight up">&#9650;</button>
+      <button class="key" id="kL" aria-label="Move the sight left">&#9664;</button>
+      <button class="key" id="kD" aria-label="Move the sight down">&#9660;</button>
+      <button class="key" id="kR" aria-label="Move the sight right">&#9654;</button>
+    </div>
+    <button class="key wide" id="kA">Hold to swing</button>
+    <button class="key" id="kM" title="Toggle the CRT filter">CRT</button>
+  </div>
+  <div id="hint">
+    <b>Arrows</b> or <b>WASD</b> move the hitting sight &mdash; put it where you think the pitch is going<br>
+    <b>Hold space</b> (or the button) to load as he winds up, <b>let go</b> as the ball reaches the plate<br>
+    Meet it under the middle and it goes a long way. Hold too long and you are out in front of it.
+  </div>
+</div>
+<script>
+/* ============================================================
+   UPPER DECK — pixel toolkit
+   A hand-drawn 5x7 bitmap font and sprite blitter, so every
+   glyph and every limb is placed pixel by pixel.
+   ============================================================ */
+"use strict";
+
+var W = 320, H = 180;
+var CV = document.getElementById("c");
+var X = CV.getContext("2d", { alpha: false });
+X.imageSmoothingEnabled = false;
+
+/* ---------------- palette ---------------- */
+var P = {
+  sky1: "#2b4a8c", sky2: "#4a76bd", sky3: "#7aa5dd",
+  dusk1: "#2a1f4e", dusk2: "#6b3a62", dusk3: "#c46a52",
+  night1: "#070b1e", night2: "#101a3c", night3: "#1b2a55",
+  grass1: "#2f6b35", grass2: "#276029", grass3: "#3b7d41",
+  chalk: "#eef3e2", dirt: "#6a5436",
+  post: "#ffd447", postDark: "#c79a14",
+  stand: "#2a2f47", standLip: "#3d4466",
+  ink: "#0a0c16", white: "#f2f6ff", dim: "#8d9ac2",
+  red: "#e0483c", blue: "#3f6fd8", gold: "#ffd447",
+  green: "#5ad46a", orange: "#ff9a3c", ball: "#8b4a22", ballLace: "#f2f6ff"
+};
+
+/* ---------------- 5x7 bitmap font ----------------
+   Seven rows of five columns per glyph. Authored by hand so the
+   letterforms stay readable at one device pixel per cell.      */
+var FONT = {
+  "A": " ### /#   #/#   #/#####/#   #/#   #/#   #",
+  "B": "#### /#   #/#   #/#### /#   #/#   #/#### ",
+  "C": " ### /#   #/#    /#    /#    /#   #/ ### ",
+  "D": "#### /#   #/#   #/#   #/#   #/#   #/#### ",
+  "E": "#####/#    /#    /#### /#    /#    /#####",
+  "F": "#####/#    /#    /#### /#    /#    /#    ",
+  "G": " ### /#   #/#    /#  ##/#   #/#   #/ ####",
+  "H": "#   #/#   #/#   #/#####/#   #/#   #/#   #",
+  "I": "#####/  #  /  #  /  #  /  #  /  #  /#####",
+  "J": "    #/    #/    #/    #/    #/#   #/ ### ",
+  "K": "#   #/#  # /# #  /##   /# #  /#  # /#   #",
+  "L": "#    /#    /#    /#    /#    /#    /#####",
+  "M": "#   #/## ##/# # #/#   #/#   #/#   #/#   #",
+  "N": "#   #/##  #/# # #/#  ##/#   #/#   #/#   #",
+  "O": " ### /#   #/#   #/#   #/#   #/#   #/ ### ",
+  "P": "#### /#   #/#   #/#### /#    /#    /#    ",
+  "Q": " ### /#   #/#   #/#   #/# # #/#  # / ## #",
+  "R": "#### /#   #/#   #/#### /# #  /#  # /#   #",
+  "S": " ####/#    /#    / ### /    #/    #/#### ",
+  "T": "#####/  #  /  #  /  #  /  #  /  #  /  #  ",
+  "U": "#   #/#   #/#   #/#   #/#   #/#   #/ ### ",
+  "V": "#   #/#   #/#   #/#   #/#   #/ # # /  #  ",
+  "W": "#   #/#   #/#   #/#   #/# # #/## ##/#   #",
+  "X": "#   #/#   #/ # # /  #  / # # /#   #/#   #",
+  "Y": "#   #/#   #/ # # /  #  /  #  /  #  /  #  ",
+  "Z": "#####/    #/   # /  #  / #   /#    /#####",
+  "0": " ### /#   #/#  ##/# # #/##  #/#   #/ ### ",
+  "1": "  #  / ##  /  #  /  #  /  #  /  #  / ### ",
+  "2": " ### /#   #/    #/   # /  #  / #   /#####",
+  "3": "#####/   # /  #  /   # /    #/#   #/ ### ",
+  "4": "   # /  ## / # # /#  # /#####/   # /   # ",
+  "5": "#####/#    /#### /    #/    #/#   #/ ### ",
+  "6": "  ## / #   /#    /#### /#   #/#   #/ ### ",
+  "7": "#####/    #/   # /  #  / #   / #   / #   ",
+  "8": " ### /#   #/#   #/ ### /#   #/#   #/ ### ",
+  "9": " ### /#   #/#   #/ ####/    #/   # / ##  ",
+  " ": "     /     /     /     /     /     /     ",
+  ".": "     /     /     /     /     / ##  / ##  ",
+  ",": "     /     /     /     / ##  / ##  / #   ",
+  "!": "  #  /  #  /  #  /  #  /  #  /     /  #  ",
+  "?": " ### /#   #/    #/   # /  #  /     /  #  ",
+  "'": "  #  /  #  /     /     /     /     /     ",
+  "-": "     /     /     /#####/     /     /     ",
+  "+": "     /  #  /  #  /#####/  #  /  #  /     ",
+  ":": "     / ##  / ##  /     / ##  / ##  /     ",
+  "/": "    #/    #/   # /  #  / #   /#    /#    ",
+  "(": "   # /  #  / #   / #   / #   /  #  /   # ",
+  ")": " #   /  #  /   # /   # /   # /  #  / #   ",
+  "%": "#   #/#  # /  #  /  #  /  #  / #  #/#   #",
+  "&": " ##  /#  # /#  # / ##  /#  ##/#  # / ## #",
+  "=": "     /     /#####/     /#####/     /     ",
+  "*": "     /#   #/ # # /#####/ # # /#   #/     ",
+  "#": " # # /#####/ # # / # # /#####/ # # /     ",
+  "°": " ##  /#  # / ##  /     /     /     /     ",
+  "×": "     /#   #/ # # /  #  / # # /#   #/     ",
+  "↑": "  #  / ### /# # #/  #  /  #  /  #  /  #  ",
+  "↓": "  #  /  #  /  #  /# # #/ ### /  #  /     ",
+  "←": "     /  #  / #   /#####/ #   /  #  /     ",
+  "→": "     /  #  /   # /#####/   # /  #  /     ",
+  "▲": "     /  #  / ### /#####/     /     /     ",
+  "▼": "     /     /#####/ ### /  #  /     /     ",
+  "♥": "     / # # /#####/#####/ ### /  #  /     "
+};
+var GLYPH = {};
+(function compileFont() {
+  var ch;
+  for (ch in FONT) {
+    if (!Object.prototype.hasOwnProperty.call(FONT, ch)) continue;
+    GLYPH[ch] = FONT[ch].split("/").map(function (row) {
+      var bits = [];
+      for (var i = 0; i < 5; i++) bits.push(row.charAt(i) === "#");
+      return bits;
+    });
+  }
+})();
+
+function px(x, y, w, h, c) { X.fillStyle = c; X.fillRect(x | 0, y | 0, w | 0, h | 0); }
+function pxc(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
+
+/* Draw a string. s = pixel size, tracking = gap between glyphs. */
+function textAt(str, x, y, color, s, tracking, ctx) {
+  s = s || 1; tracking = tracking == null ? 1 : tracking;
+  var c = ctx || X;
+  var cx = x | 0, i, r, col;
+  str = String(str).toUpperCase();
+  c.fillStyle = color;
+  for (i = 0; i < str.length; i++) {
+    var g = GLYPH[str.charAt(i)];
+    if (!g) { cx += (5 + tracking) * s; continue; }
+    for (r = 0; r < 7; r++) for (col = 0; col < 5; col++) {
+      if (g[r][col]) c.fillRect(cx + col * s, (y | 0) + r * s, s, s);
+    }
+    cx += (5 + tracking) * s;
+  }
+  return cx - tracking * s;
+}
+function textWidth(str, s, tracking) {
+  s = s || 1; tracking = tracking == null ? 1 : tracking;
+  return String(str).length * (5 + tracking) * s - tracking * s;
+}
+function textCenter(str, cx, y, color, s, tracking, ctx) {
+  return textAt(str, Math.round(cx - textWidth(str, s, tracking) / 2), y, color, s, tracking, ctx);
+}
+/* Chunky drop-shadowed headline. */
+function textShadow(str, x, y, color, shadow, s, tracking) {
+  textAt(str, x + s, y + s, shadow, s, tracking);
+  textAt(str, x, y, color, s, tracking);
+}
+function textCenterShadow(str, cx, y, color, shadow, s, tracking) {
+  var x = Math.round(cx - textWidth(str, s, tracking) / 2);
+  textShadow(str, x, y, color, shadow, s, tracking);
+}
+
+/* ---------------- sprite blitter ----------------
+   Rows of characters; each character is a palette key.
+   "." is transparent.                                */
+function drawSprite(rows, x, y, pal, flip, scale, ctx) {
+  var c = ctx || X;
+  scale = scale || 1;
+  var h = rows.length, w = rows[0].length, r, i;
+  for (r = 0; r < h; r++) {
+    var row = rows[r];
+    for (i = 0; i < w; i++) {
+      var k = row.charAt(flip ? w - 1 - i : i);
+      var col = pal[k];
+      if (!col) continue;
+      c.fillStyle = col;
+      c.fillRect((x | 0) + i * scale, (y | 0) + r * scale, scale, scale);
+    }
+  }
+}
+
+/* ---------------- kits ----------------
+   Two hitters for the pass-and-play derby, plus the people who have
+   to stand there and watch: catcher, umpire, pitcher. */
+var KITS = [
+  { name: "HOME", shirt: "#e8ecf7", dark: "#b9c1d6", trim: "#c8443a", pants: "#e8ecf7", pdark: "#b9c1d6", sock: "#8c2a22", helm: "#8c2a22", num: "#8c2a22" },
+  { name: "AWAY", shirt: "#8ea0c4", dark: "#5f7099", trim: "#1f3a6e", pants: "#8ea0c4", pdark: "#5f7099", sock: "#1f3a6e", helm: "#1f3a6e", num: "#1f3a6e" }
+];
+var CATCH_KIT = { shirt: "#3b6f3f", dark: "#255029", gear: "#d8b23c", pants: "#cfd6e4", sock: "#1f3324", helm: "#2b4b2e" };
+var PITCH_KIT = { shirt: "#cfd6e4", dark: "#9aa4ba", trim: "#2b3a66", pants: "#cfd6e4", pdark: "#9aa4ba", sock: "#2b3a66", helm: "#2b3a66" };
+
+function hitterPal(k) {
+  return {
+    ".": null, " ": null,
+    j: k.shirt, d: k.dark, t: k.trim, n: k.num,
+    p: k.pants, q: k.pdark, o: k.sock,
+    h: k.helm, s: "#c58b5c", b: "#1b1b24", w: "#8a5a2a"   /* w is the bat */
+  };
+}
+function catcherPal() {
+  return {
+    ".": null, " ": null,
+    j: CATCH_KIT.shirt, d: CATCH_KIT.dark, g: CATCH_KIT.gear,
+    p: CATCH_KIT.pants, q: "#aab3c4", o: CATCH_KIT.sock,
+    h: CATCH_KIT.helm, s: "#c58b5c", b: "#1b1b24", m: "#6b4a28"   /* m is the mitt */
+  };
+}
+function pitcherPal() {
+  return {
+    ".": null, " ": null,
+    j: PITCH_KIT.shirt, d: PITCH_KIT.dark, t: PITCH_KIT.trim, n: PITCH_KIT.trim,
+    p: PITCH_KIT.pants, q: PITCH_KIT.pdark, o: PITCH_KIT.sock,
+    h: PITCH_KIT.helm, s: "#c58b5c", b: "#1b1b24", w: "#8a5a2a"
+  };
+}
+function umpPal() {
+  return { ".": null, " ": null, j: "#23262e", d: "#15171c", h: "#0f1116",
+    g: "#2f3440", p: "#2a2d36", q: "#1a1c23", s: "#c58b5c", b: "#101218", o: "#15171c", n: "#23262e" };
+}
+
+/* ---------------- the hitter ----------------
+   Seen from behind the plate, standing in the left-hand box, so we get
+   his back and the bat over his shoulder. 14 wide x 22 tall. */
+var HITTER = [
+  /* 0 — stance, bat up */
+  ["..........ww..", ".........ww...", "....hhhh.w....", "...hhhhhhw....", "...hsssshw....",
+   "....ssss.w....", "...jjjjjj.....", "..jjjjjjjj....", ".jjjjjjjjjj...", ".jjjdnnddjj...",
+   ".jjjdnnddjj...", ".jjjjjjjjjj...", "..jjjjjjjj....", "...jjjjjj.....", "...pppppp.....",
+   "...pp..pp.....", "...pp..pp.....", "...qp..pq.....", "...oo..oo.....", "...oo..oo.....",
+   "..bbb..bbb....", ".............."],
+  /* 1 — loaded, hands back, weight gathered */
+  ["...........ww.", "..........ww..", "....hhhh..w...", "...hhhhhh.w...", "...hsssshw....",
+   "....ssss.w....", "...jjjjjj.....", "..jjjjjjjj....", ".jjjjjjjjjj...", ".jjjdnnddjj...",
+   ".jjjdnnddjj...", "..jjjjjjjj....", "..jjjjjjj.....", "...jjjjjj.....", "...ppppp......",
+   "...pp.pp......", "..pp...pp.....", "..qp...pq.....", "..oo....oo....", "..oo....oo....",
+   ".bbb....bbb...", ".............."],
+  /* 2 — swinging, bat coming through flat */
+  ["..............", "..............", "....hhhh......", "...hhhhhh.....", "...hssssh.....",
+   "....ssss......", "wwwjjjjjjj....", ".wwjjjjjjjj...", "..wjjjjjjjj...", "...jdnnddjj...",
+   "...jdnnddjj...", "...jjjjjjjj...", "....jjjjjj....", "....jjjjj.....", "...ppppp......",
+   "...pp.ppp.....", "..pp....pp....", "..qp....pq....", "..oo.....oo...", "..oo.....oo...",
+   ".bbb.....bbb..", ".............."],
+  /* 3 — follow through, bat wrapped */
+  ["..............", "..............", "....hhhh......", "...hhhhhh.....", "...hssssh.....",
+   "....ssss......", "...jjjjjjww...", "..jjjjjjjjww..", ".jjjjjjjjjj.w.", ".jjjdnnddjj...",
+   ".jjjdnnddjj...", "..jjjjjjjj....", "..jjjjjjj.....", "...jjjjj......", "...ppppp......",
+   "..ppp..pp.....", "..pp....pp....", "..qp....pq....", ".oo......oo...", ".oo......oo...",
+   "bbb......bbb..", ".............."],
+  /* 4 — watching it go */
+  ["..............", "....hhhh...w..", "...hhhhhh.w...", "...hsssshw....", "....ssss.w....",
+   "...jjjjjjw....", "..jjjjjjjj....", ".jjjjjjjjjj...", ".jjjdnnddjj...", ".jjjdnnddjj...",
+   ".jjjjjjjjjj...", "..jjjjjjjj....", "...jjjjjj.....", "...jjjjjj.....", "...pppppp.....",
+   "...pp..pp.....", "...pp..pp.....", "...qp..pq.....", "...oo..oo.....", "...oo..oo.....",
+   "..bbb..bbb....", ".............."]
+];
+
+/* ---------------- the catcher ----------------
+   Crouched, back to camera, mitt out to one side. 18 x 14. */
+var CATCHER = [
+  "......hhhhhh......", ".....hhgggghh.....", ".....hgssssgh.....", "......gssssg......",
+  "....jjjjjjjjjj....", "..mmjjjjjjjjjjdd..", ".mmmjjjjjjjjjjdd..", ".mmmjjjjjjjjjjd...",
+  "..mmjjjjjjjjjj....", "....pppppppppp....", "...pppp....pppp...", "...oo........oo...",
+  "..ooo........ooo..", ".bbbb........bbbb."
+];
+/* ---------------- the umpire, leaning over his shoulder ---------------- */
+var UMP = [
+  ".....hhhhhh.....", "....hhhhhhhh....", "....hgssssgh....", ".....gssssg.....",
+  "...jjjjjjjjjj...", "..jjjjjjjjjjjj..", ".jjjjjjjjjjjjj..", ".jjjjjjjjjjjjj..",
+  "..jjjjjjjjjjjj..", "...pppppppppp...", "..pppp....pppp..", "..oo........oo..",
+  ".ooo........ooo.", "bbbb........bbbb"
+];
+
+/* ---------------- the pitcher ----------------
+   Small and far away, so three broad frames do the job. 11 x 16. */
+var PITCHER = [
+  /* 0 — set */
+  ["...hhhhh...", "..hhsshh...", "...ssss....", "..jjjjjj...", ".jjjjjjjj..", ".jjdnndjj..",
+   ".jjjjjjjj..", "..jjjjjj...", "..pppppp...", "..pp..pp...", "..pp..pp...", "..qp..pq...",
+   "..oo..oo...", "..oo..oo...", ".bbb..bbb..", "..........."],
+  /* 1 — leg up */
+  ["...hhhhh...", "..hhsshh...", "...ssss....", "..jjjjjj...", ".jjjjjjjjw.", ".jjdnndjj..",
+   ".jjjjjjjj..", "..jjjjjj...", "..ppppp....", "..pp.pppp..", "..pp...pp..", "..qp.......",
+   "..oo.......", "..oo.......", ".bbb.......", "..........."],
+  /* 2 — release */
+  ["..hhhhh....", ".hhsshh....", "..ssss.....", ".jjjjjj....", "jjjjjjjjjw.", "jjdnndjjj..",
+   ".jjjjjjj...", "..jjjjj....", "..pppp.....", ".pp...ppp..", ".pp.....pp.", ".qp......q.",
+   ".oo........", ".oo........", "bbb........", "..........."]
+];
+
+/* ---------------- the ball ---------------- */
+var BALL_BIG = [
+  "..####..", ".#wwww#.", "#wwrrww#", "#wrwwrw#", "#wrwwrw#", "#wwrrww#", ".#wwww#.", "..####.."
+];
+var BALL_MID = [".###.", "#wrw#", "#www#", "#wrw#", ".###."];
+function ballPal() { return { ".": null, "#": "#cdd4e2", w: "#f8fbff", r: "#c0392b" }; }
+
+/* a fielder, four pixels of hope in the distance */
+var FIELDER = ["..j..", ".jjj.", ".jjj.", "..p..", ".o.o."];
+/* A seeded value stream, so crowd layouts and gusts stay stable
+   within a kick instead of boiling between frames. */
+function hash32(n) {
+  n = (n ^ 61) ^ (n >>> 16); n = (n + (n << 3)) >>> 0;
+  n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d) >>> 0;
+  return (n ^ (n >>> 15)) >>> 0;
+}
+function rnd(seed) { return hash32(seed >>> 0) / 4294967296; }
+/* ============================================================
+   UPPER DECK — the ballpark
+   World units are yards with home plate at the origin and the
+   mound at z = 20. Distances shown to the player are scaled up
+   so the numbers read like a real park: 46 yards is 400 feet.
+   ============================================================ */
+
+var FT_PER_YD = 8.7;        /* so the fence reads 348 down the line, 400 to centre */
+var MOUND_Z = 20;
+var ZONE_W = 0.236;         /* half the width of the strike zone */
+var ZONE_LO = 0.50, ZONE_HI = 1.17;
+var WALL_H = 1.1;
+
+/* The fence is an arc: short down the lines, deep to centre. */
+function fenceAt(ang) {
+  var t = Math.abs(ang) / (Math.PI / 4);
+  return 46 - 6 * t * t;
+}
+function fenceZForX(x, z) {
+  var ang = Math.atan2(x, Math.max(0.001, z));
+  return fenceAt(ang);
+}
+
+/* ---------------- camera ----------------
+   Two set-ups: tight and low for the pitch, high and wide for the
+   ball in the air. The second is what makes a fly ball readable. */
+var CAM_PLATE = { focal: 472, horizon: 68, camY: 0.90, camZ: -4.5 };
+var CAM_FIELD = { focal: 306, horizon: 57, camY: 7.6, camZ: -11 };
+var cam = { focal: 472, horizon: 68, camY: 0.90, camZ: -4.5 };
+
+function camTo(target, dt, rate) {
+  var k = Math.min(1, dt * (rate || 9));
+  cam.focal += (target.focal - cam.focal) * k;
+  cam.horizon += (target.horizon - cam.horizon) * k;
+  cam.camY += (target.camY - cam.camY) * k;
+  cam.camZ += (target.camZ - cam.camZ) * k;
+}
+function camSet(target) {
+  cam.focal = target.focal; cam.horizon = target.horizon;
+  cam.camY = target.camY; cam.camZ = target.camZ;
+}
+function proj(x, y, z) {
+  var d = z - cam.camZ;
+  if (d < 0.5) d = 0.5;
+  var s = cam.focal / d;
+  return { x: 160 + x * s, y: cam.horizon - (y - cam.camY) * s, s: s };
+}
+
+/* ---------------- sky and stands ---------------- */
+var SKYSET = {
+  day: { a: "#3f74c8", b: "#6d9cdd", c: "#9cc2ee", sun: "#fff3c4", haze: "#c9ddf5" },
+  dusk: { a: "#2a1f4e", b: "#7b3f6a", c: "#d9794f", sun: "#ffd08a", haze: "#e9a06d" },
+  night: { a: "#05081a", b: "#0b1430", c: "#162448", sun: "#dfe7fa", haze: "#1d2d58" }
+};
+var CROWD_DAY = ["#8e4a44", "#b9c1d6", "#3f5c96", "#9a8450", "#6b5a4a", "#7c88ab"];
+var CROWD_NIGHT = ["#4a2824", "#5e6484", "#24395f", "#5c4e30", "#3a3028", "#434b68"];
+
+/* A band of crowd that follows a curve, so the bleachers wrap the
+   outfield instead of sitting in a flat strip. */
+function crowdCurve(ctx, topFn, height, bright, seedBase) {
+  var cols = bright ? CROWD_DAY : CROWD_NIGHT, n = seedBase;
+  for (var x = 0; x < W; x++) {
+    var top = topFn(x);
+    if (top == null) continue;
+    for (var r = 0; r < height; r++) {
+      n++;
+      var y = Math.round(top - r);
+      if (y < 0 || y >= H) continue;
+      if (r % 3 === 2) { pxc(ctx, x, y, 1, 1, bright ? "#2a3048" : "#161b30"); continue; }
+      if (rnd(n * 2654435761 + r * 97) < 0.22) continue;
+      pxc(ctx, x, y, 1, 1, cols[Math.floor(rnd(n * 40503 + 7) * cols.length)]);
+    }
+  }
+}
+
+function lightTower(ctx, x, yTop, night) {
+  pxc(ctx, x - 1, yTop + 8, 3, 18, night ? "#0d1226" : "#1b2038");
+  pxc(ctx, x - 12, yTop, 25, 8, night ? "#141b36" : "#232a46");
+  for (var r = 0; r < 3; r++) for (var i = 0; i < 8; i++) {
+    var on = night || ((i + r) % 2 === 0);
+    pxc(ctx, x - 11 + i * 3, yTop + 1 + r * 2.4, 2, 2, on ? (night ? "#fff6c8" : "#e4ecff") : "#39405e");
+  }
+  if (night) {
+    ctx.globalAlpha = 0.13; pxc(ctx, x - 20, yTop - 2, 41, 14, "#fff6c8");
+    ctx.globalAlpha = 0.06; pxc(ctx, x - 32, yTop - 4, 65, 34, "#fff6c8");
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ---------------- the park ----------------
+   Drawn live rather than cached, because the camera moves while the
+   ball is in the air and every line has to move with it.          */
+var AD_COLS = ["#c0392b", "#1f6fd0", "#2f9e4f", "#d8a21c", "#8c3fb0", "#19989c"];
+function shade(hex, f) {
+  var n = parseInt(hex.slice(1), 16);
+  var r = Math.min(255, Math.round(((n >> 16) & 255) * f));
+  var g = Math.min(255, Math.round(((n >> 8) & 255) * f));
+  var b = Math.min(255, Math.round((n & 255) * f));
+  return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+
+function drawSky(G) {
+  var S = SKYSET[G.sky], night = G.sky === "night";
+  pxc(X, 0, 0, W, H, S.a);
+  var hz = Math.round(cam.horizon);
+  var bands = [[hz - 58, S.a], [hz - 44, S.b], [hz - 30, S.b], [hz - 18, S.c], [hz - 8, S.haze]];
+  for (var i = 0; i < bands.length; i++) {
+    var y0 = Math.max(0, bands[i][0]);
+    var y1 = i + 1 < bands.length ? Math.max(0, bands[i + 1][0]) : hz;
+    if (y1 > y0) pxc(X, 0, y0, W, y1 - y0, bands[i][1]);
+  }
+  if (night) {
+    for (var k = 0; k < 80; k++) {
+      var sx = Math.floor(rnd(k * 7 + 1) * W), sy = Math.floor(rnd(k * 13 + 5) * Math.max(1, hz - 20));
+      pxc(X, sx, sy, 1, 1, k % 5 ? "#5c6a9c" : "#e8eeff");
+    }
+  } else if (G.sky === "dusk") {
+    pxc(X, 238, hz - 42, 10, 10, S.sun); pxc(X, 236, hz - 40, 14, 6, S.sun);
+  } else {
+    pxc(X, 248, hz - 52, 12, 12, S.sun); pxc(X, 246, hz - 50, 16, 8, S.sun);
+  }
+}
+
+/* The fence as an arc of projected posts, measured once per frame.
+   Behind it the stands run all the way up to the horizon, which is
+   what the far end of a ballpark actually looks like from the field. */
+function measureWall() {
+  var topOf = new Array(W), botOf = new Array(W), standOf = new Array(W), i;
+  for (i = 0; i < W; i++) { topOf[i] = null; botOf[i] = null; standOf[i] = null; }
+  var STEPS = 260;
+  for (i = 0; i <= STEPS; i++) {
+    var ang = -Math.PI / 4 + (i / STEPS) * (Math.PI / 2);
+    var r = fenceAt(ang);
+    var wx = Math.sin(ang) * r, wz = Math.cos(ang) * r;
+    var base = proj(wx, 0, wz), top = proj(wx, WALL_H, wz), stand = proj(wx, WALL_H + 8.5, wz);
+    var cx = Math.round(base.x);
+    if (cx < 0 || cx >= W) continue;
+    if (topOf[cx] == null || top.y < topOf[cx]) {
+      topOf[cx] = top.y; botOf[cx] = base.y; standOf[cx] = stand.y;
+    }
+  }
+  var lt = null, lb = null, ls = null;
+  for (i = 0; i < W; i++) {
+    if (topOf[i] == null) { topOf[i] = lt; botOf[i] = lb; standOf[i] = ls; }
+    else { lt = topOf[i]; lb = botOf[i]; ls = standOf[i]; }
+  }
+  for (i = W - 1; i >= 0; i--) {
+    if (topOf[i] == null && i + 1 < W) { topOf[i] = topOf[i + 1]; botOf[i] = botOf[i + 1]; standOf[i] = standOf[i + 1]; }
+  }
+  return { top: topOf, bot: botOf, stand: standOf };
+}
+
+function drawStandsAndWall(G, wall) {
+  var night = G.sky === "night", i;
+  var topOf = wall.top, botOf = wall.bot, standOf = wall.stand;
+
+  /* The bowl behind the fence: a lower deck, a band of concrete and
+     skyboxes, then an upper deck under its own roof. */
+  var cols = night ? CROWD_NIGHT : CROWD_DAY, n = 1200;
+  for (i = 0; i < W; i++) {
+    if (topOf[i] == null) continue;
+    var t = Math.round(topOf[i]);
+    var sTop = Math.max(-3, Math.round(standOf[i]));
+    var span = t - sTop;
+    if (span < 3) continue;
+    var lower = Math.round(span * 0.42);       /* nearest deck */
+    var facade = Math.max(2, Math.round(span * 0.16));
+    for (var y = sTop; y < t; y++) {
+      n++;
+      if (y < 0 || y >= H) continue;
+      var fromWall = t - y;
+      if (fromWall <= lower) {
+        if (fromWall % 4 === 0) { pxc(X, i, y, 1, 1, night ? "#161b30" : "#2a3048"); continue; }
+        pxc(X, i, y, 1, 1, cols[Math.floor(rnd(n * 40503 + 7) * cols.length)]);
+      } else if (fromWall <= lower + facade) {
+        /* concrete, with a lit window every so often */
+        var lit = (i % 19 < 9) && fromWall === lower + Math.max(1, Math.floor(facade / 2));
+        pxc(X, i, y, 1, 1, lit ? (night ? "#d8b23c" : "#f0e3b0") : (night ? "#1a2030" : "#4a5064"));
+      } else {
+        if (fromWall % 4 === 1) { pxc(X, i, y, 1, 1, night ? "#131828" : "#252b40"); continue; }
+        if (rnd(n * 2654435761 + y * 97) < 0.26) { pxc(X, i, y, 1, 1, night ? "#0f1422" : "#333a52"); continue; }
+        pxc(X, i, y, 1, 1, shade(cols[Math.floor(rnd(n * 40503 + 7) * cols.length)], 0.82));
+      }
+    }
+    pxc(X, i, sTop, 1, 2, night ? "#0a0e1c" : "#1b2134");         /* roof */
+    pxc(X, i, sTop + 2, 1, 1, night ? "#1d2440" : "#59607a");
+  }
+
+  /* the wall itself */
+  for (i = 0; i < W; i++) {
+    if (topOf[i] == null) continue;
+    var wt = Math.round(topOf[i]), wb = Math.round(botOf[i]);
+    var hgt = Math.max(1, wb - wt);
+    pxc(X, i, wt, 1, hgt, night ? "#15311c" : "#1d4426");
+    if (hgt >= 5) {
+      var adc = AD_COLS[Math.floor(i / 34) % AD_COLS.length];
+      if (night) adc = shade(adc, 0.6);
+      pxc(X, i, wt + Math.round(hgt * 0.35), 1, Math.max(1, Math.round(hgt * 0.4)),
+        (i % 34 < 30) ? adc : shade(adc, 0.5));
+    }
+    pxc(X, i, wt, 1, 1, night ? "#b79a2c" : "#f0c04a");
+  }
+}
+
+function drawOutfieldUnused(G) {
+  var night = G.sky === "night";
+  var topOf = new Array(W), botOf = new Array(W), i;
+  for (i = 0; i < W; i++) { topOf[i] = null; botOf[i] = null; }
+
+  var STEPS = 180;
+  for (i = 0; i <= STEPS; i++) {
+    var ang = -Math.PI / 4 + (i / STEPS) * (Math.PI / 2);
+    var r = fenceAt(ang);
+    var wx = Math.sin(ang) * r, wz = Math.cos(ang) * r;
+    var base = proj(wx, 0, wz), top = proj(wx, WALL_H, wz);
+    var cx = Math.round(base.x);
+    if (cx < -40 || cx > W + 40) continue;
+    var x0 = Math.max(0, cx), x1 = Math.min(W - 1, cx);
+    if (x0 > x1) continue;
+    if (topOf[cx] == null || top.y < topOf[cx]) { topOf[cx] = top.y; botOf[cx] = base.y; }
+  }
+  /* fill the gaps left between projected samples */
+  var lastT = null, lastB = null;
+  for (i = 0; i < W; i++) {
+    if (topOf[i] == null) { topOf[i] = lastT; botOf[i] = lastB; }
+    else { lastT = topOf[i]; lastB = botOf[i]; }
+  }
+  for (i = W - 1; i >= 0; i--) {
+    if (topOf[i] == null && i + 1 < W) { topOf[i] = topOf[i + 1]; botOf[i] = botOf[i + 1]; }
+  }
+
+  /* bleachers and crowd behind the wall */
+  crowdCurve(X, function (x) { return topOf[x] == null ? null : topOf[x] - 1; }, 13, !night, 1200);
+  /* a dark lip where the stands meet the wall */
+  for (i = 0; i < W; i++) {
+    if (topOf[i] == null) continue;
+    pxc(X, i, Math.round(topOf[i]) - 14, 1, 2, night ? "#10162c" : "#232a42");
+  }
+
+  /* the wall itself: padding, an ad stripe, and a yellow top line */
+  for (i = 0; i < W; i++) {
+    if (topOf[i] == null) continue;
+    var t = Math.round(topOf[i]), b = Math.round(botOf[i]);
+    var hgt = Math.max(1, b - t);
+    var pad = night ? "#15311c" : "#1d4426";
+    pxc(X, i, t, 1, hgt, pad);
+    if (hgt >= 5) {
+      var adc = AD_COLS[Math.floor(i / 34) % AD_COLS.length];
+      if (night) adc = shade(adc, 0.6);
+      pxc(X, i, t + Math.round(hgt * 0.35), 1, Math.max(1, Math.round(hgt * 0.4)), (i % 34 < 30) ? adc : shade(adc, 0.5));
+    }
+    pxc(X, i, t, 1, 1, night ? "#b79a2c" : "#f0c04a");
+  }
+  return topOf;
+}
+
+function drawField(G) {
+  var night = G.sky === "night";
+  var grass1 = night ? "#1b4a22" : "#2f7a39";
+  var grass2 = night ? "#174020" : "#276c31";
+  var dirt = night ? "#4a3522" : "#8a6239";
+  var dirt2 = night ? "#3d2c1c" : "#78542f";
+  var chalk = night ? "#cfd8c4" : "#f4f8ec";
+
+  /* grass from the horizon down */
+  var hz = Math.round(cam.horizon);
+  pxc(X, 0, hz, W, H - hz, grass1);
+
+  /* mow arcs, drawn as bands of constant distance from the plate */
+  var r, a;
+  for (r = 6; r < 54; r += 6) {
+    for (a = -0.82; a <= 0.82; a += 0.012) {
+      var p0 = proj(Math.sin(a) * r, 0, Math.cos(a) * r);
+      var p1 = proj(Math.sin(a) * (r + 3), 0, Math.cos(a) * (r + 3));
+      var yy0 = Math.round(p1.y), yy1 = Math.round(p0.y);
+      if (yy1 <= yy0) continue;
+      var xx = Math.round(p0.x);
+      if (xx < 0 || xx >= W) continue;
+      pxc(X, xx, yy0, 2, yy1 - yy0, grass2);
+    }
+  }
+
+  /* infield dirt: an arc out to 9 yards, plus the cutouts */
+  for (a = -0.85; a <= 0.85; a += 0.006) {
+    var inner = proj(Math.sin(a) * 1.2, 0, Math.cos(a) * 1.2);
+    var outer = proj(Math.sin(a) * 9.5, 0, Math.cos(a) * 9.5);
+    var y0 = Math.round(outer.y), y1 = Math.round(inner.y);
+    var x0 = Math.round(outer.x);
+    if (y1 <= y0 || x0 < 0 || x0 >= W) continue;
+    pxc(X, x0, y0, 2, y1 - y0, dirt);
+  }
+  /* The mound, filled from its front lip to its back lip at every
+     slice. Sweeping an angle instead only drew half a crescent. */
+  var MR = 1.8;
+  for (var mx = -MR; mx <= MR; mx += 0.05) {
+    var half = Math.sqrt(Math.max(0, MR * MR - mx * mx));
+    var front = proj(mx, 0, MOUND_Z - half);
+    var back = proj(mx, 0.14, MOUND_Z + half);
+    var fy = Math.round(front.y), by = Math.round(back.y);
+    if (fy <= by) continue;
+    pxc(X, Math.round(front.x), by, 2, fy - by, dirt2);
+  }
+  var rub = proj(0, 0.08, MOUND_Z);
+  pxc(X, Math.round(rub.x) - Math.round(0.3 * rub.s), Math.round(rub.y), Math.max(2, Math.round(0.6 * rub.s)), Math.max(1, Math.round(0.12 * rub.s)), chalk);
+
+  /* foul lines out to the poles */
+  for (var side = -1; side <= 1; side += 2) {
+    for (var d = 1; d < 48; d += 0.35) {
+      var fp = proj(side * Math.sin(Math.PI / 4) * d, 0.02, Math.cos(Math.PI / 4) * d);
+      if (fp.y < hz || fp.y > H) continue;
+      pxc(X, Math.round(fp.x), Math.round(fp.y), Math.max(1, Math.round(0.13 * fp.s)), 1, chalk);
+    }
+  }
+
+  /* home plate and the boxes */
+  var hp = proj(0, 0.02, 0);
+  var pw = Math.max(3, Math.round(0.47 * hp.s));
+  pxc(X, Math.round(hp.x - pw / 2), Math.round(hp.y - pw * 0.25), pw, Math.max(2, Math.round(pw * 0.5)), chalk);
+  for (var bx = -1; bx <= 1; bx += 2) {
+    var b0 = proj(bx * 0.95, 0.02, -0.9), b1 = proj(bx * 0.95, 0.02, 1.1);
+    var b2 = proj(bx * 0.42, 0.02, -0.9), b3 = proj(bx * 0.42, 0.02, 1.1);
+    line2(b0, b1, chalk); line2(b2, b3, chalk); line2(b0, b2, chalk); line2(b1, b3, chalk);
+  }
+}
+function line2(p, q, col) {
+  var n = Math.max(2, Math.round(Math.max(Math.abs(q.x - p.x), Math.abs(q.y - p.y))));
+  for (var i = 0; i <= n; i++) {
+    var t = i / n, x = p.x + (q.x - p.x) * t, y = p.y + (q.y - p.y) * t;
+    if (y < cam.horizon || y > H || x < 0 || x >= W) continue;
+    pxc(X, Math.round(x), Math.round(y), 1, 1, col);
+  }
+}
+
+/* foul poles, a scoreboard and the lights, all keyed off the wall */
+function drawFurniture(G, topOf) {
+  var night = G.sky === "night";
+  for (var side = -1; side <= 1; side += 2) {
+    var ang = side * Math.PI / 4, r = fenceAt(ang);
+    var base = proj(Math.sin(ang) * r, WALL_H, Math.cos(ang) * r);
+    var top = proj(Math.sin(ang) * r, WALL_H + 6, Math.cos(ang) * r);
+    if (base.x < -20 || base.x > W + 20) continue;
+    var wpx = Math.max(1, Math.round(0.22 * base.s));
+    pxc(X, Math.round(base.x), Math.round(top.y), wpx, Math.round(base.y - top.y), "#f0c04a");
+  }
+  /* Scoreboard, up on the roof of the bleachers in dead centre. Kept
+     small and lettered only when it is big enough to read, so it never
+     becomes a billboard across the middle of the picture. */
+  if (!G.hideBoard) {
+    var sb = proj(7.5, WALL_H + 9.6, fenceAt(0.17));
+    var sw = Math.round(5.2 * sb.s), sh = Math.round(2.0 * sb.s);
+    if (sb.y > 2 && sb.y + sh < cam.horizon + 6 && sw >= 16 && sw <= 110) {
+      var bx0 = Math.round(sb.x - sw / 2), by0 = Math.round(sb.y);
+      pxc(X, bx0 - 2, by0 - 2, sw + 4, sh + 4, night ? "#0a0e18" : "#171c28");
+      pxc(X, bx0, by0, sw, sh, "#05070f");
+      if (sw >= 62 && sh >= 10) textAt("UPPER DECK", bx0 + 3, by0 + 2, "#f0c04a", 1, 1);
+      else for (var li = 0; li < 3 && sh > 4; li++)
+        pxc(X, bx0 + 2, by0 + 2 + li * 3, Math.max(2, sw - 4), 1, li === 0 ? "#f0c04a" : "#2a3350");
+      pxc(X, bx0 + 3, by0 + sh, 2, Math.max(3, Math.round(sh * 0.6)), night ? "#121832" : "#232942");
+      pxc(X, bx0 + sw - 5, by0 + sh, 2, Math.max(3, Math.round(sh * 0.6)), night ? "#121832" : "#232942");
+    }
+  }
+  var lt = proj(-26, WALL_H + 11, fenceAt(-0.6));
+  var rt = proj(26, WALL_H + 11, fenceAt(0.6));
+  if (lt.y > 2 && lt.y < H) lightTower(X, Math.round(lt.x), Math.round(lt.y), night);
+  if (rt.y > 2 && rt.y < H) lightTower(X, Math.round(rt.x), Math.round(rt.y), night);
+}
+
+/* the nine men who would rather you did not do this */
+var FIELD_SPOTS = [
+  [-9, 11], [9, 11], [-5, 17], [6, 17],            /* infield */
+  [-24, 30], [0, 38], [24, 30],                      /* outfield */
+  [0, MOUND_Z]                                        /* pitcher drawn separately */
+];
+function drawFielders(G) {
+  for (var i = 0; i < 7; i++) {
+    var p = proj(FIELD_SPOTS[i][0], 0, FIELD_SPOTS[i][1]);
+    if (p.y < cam.horizon || p.y > H) continue;
+    var sc = Math.max(1, Math.round(p.s * 0.055));
+    if (sc > 6) continue;
+    drawSprite(FIELDER, Math.round(p.x) - 2 * sc, Math.round(p.y) - 5 * sc,
+      { ".": null, j: "#cfd6e4", p: "#aab3c4", o: "#2b3a66" }, false, sc);
+  }
+}
+
+function drawPark(G) {
+  drawSky(G);
+  drawField(G);                      /* grass and markings first */
+  var wall = measureWall();
+  drawStandsAndWall(G, wall);        /* then everything past the fence, over the top */
+  drawFurniture(G, wall);
+  drawFielders(G);
+}
+/* ============================================================
+   UPPER DECK — pitching, hitting and the rules
+   ============================================================ */
+
+var GRAV = 10.72;                 /* yd/s^2 */
+var BALL_R = 0.04;
+var LOAD_FULL = 0.42;             /* how long a full load takes */
+var PLATE_Y = 0.85;               /* middle of the strike zone */
+
+/* ---------------- pitchers ----------------
+   t      seconds from release to the plate
+   cmd    how close he gets to his spot
+   brk    how much his breaking stuff moves
+   junk   how often he deliberately misses the zone
+   pci    the radius of your hitting sight against him
+   win    your timing window, in seconds either side  */
+var PITCHERS = [
+  { name: "BATTING PRACTICE", t: 0.80, cmd: 0.22, brk: 0.20, junk: 0.04, pci: 0.34, win: 0.115 },
+  { name: "ROOKIE",           t: 0.72, cmd: 0.38, brk: 0.45, junk: 0.12, pci: 0.31, win: 0.106 },
+  { name: "STARTER",          t: 0.64, cmd: 0.54, brk: 0.68, junk: 0.20, pci: 0.28, win: 0.097 },
+  { name: "ACE",              t: 0.57, cmd: 0.67, brk: 0.88, junk: 0.27, pci: 0.25, win: 0.088 },
+  { name: "FLAMETHROWER",     t: 0.51, cmd: 0.76, brk: 0.98, junk: 0.30, pci: 0.23, win: 0.080 },
+  { name: "CLOSER",           t: 0.46, cmd: 0.85, brk: 1.12, junk: 0.34, pci: 0.21, win: 0.072 },
+  { name: "LEGEND",           t: 0.40, cmd: 0.93, brk: 1.32, junk: 0.38, pci: 0.185, win: 0.064 }
+];
+function pitcherOf(G) { return PITCHERS[Math.max(0, Math.min(PITCHERS.length - 1, G.tier))]; }
+
+/* ---------------- what he throws ----------------
+   tMul   stretches or shortens the flight
+   bx,by  sideways and vertical break, in yd/s^2 over the flight  */
+var PITCHES = [
+  { id: "FF", name: "FOUR-SEAM", tMul: 1.00, bx: 0.0, by: 2.2, col: "#f2f6ff", w: 34 },
+  { id: "FT", name: "TWO-SEAM", tMul: 1.03, bx: 3.4, by: 0.6, col: "#ffd9a8", w: 16 },
+  { id: "SL", name: "SLIDER", tMul: 1.09, bx: -5.2, by: -1.8, col: "#a8e0ff", w: 18 },
+  { id: "CB", name: "CURVEBALL", tMul: 1.22, bx: -1.6, by: -7.5, col: "#c7a8ff", w: 16 },
+  { id: "CH", name: "CHANGE-UP", tMul: 1.18, bx: 2.0, by: -2.6, col: "#a8ffc0", w: 16 }
+];
+function pickPitch(G, seed) {
+  var P = pitcherOf(G);
+  var pool = [], i, j;
+  for (i = 0; i < PITCHES.length; i++) {
+    var weight = PITCHES[i].w;
+    if (i > 0) weight = Math.round(weight * (0.35 + P.brk * 0.9));
+    for (j = 0; j < weight; j++) pool.push(PITCHES[i]);
+  }
+  return pool[Math.floor(rnd(seed) * pool.length)] || PITCHES[0];
+}
+
+/* ---------------- persistence ---------------- */
+var SKEY = "best";
+var GAME = "upper-deck";
+var SAVE_API = "/api/games/saves";
+var store = (function () {
+  var LS = "ud:local:";
+  function lsGet(k) { try { return window.localStorage.getItem(LS + k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(LS + k, v); return true; } catch (e) { return false; } }
+  return {
+    account: null,
+    get: function (k) {
+      var local = lsGet(k);
+      if (typeof fetch !== "function") return Promise.resolve(local);
+      return fetch(SAVE_API + "?game=" + GAME + "&key=" + encodeURIComponent(k), { credentials: "same-origin" })
+        .then(function (r) {
+          if (r.status === 401) { store.account = false; return null; }
+          if (!r.ok) return null;
+          store.account = true; return r.json();
+        })
+        .then(function (j) {
+          var remote = j && j.value != null ? j.value : null;
+          if (remote) { lsSet(k, remote); return remote; }
+          return local;
+        })
+        .catch(function () { return local; });
+    },
+    set: function (k, v) {
+      lsSet(k, v);
+      if (typeof fetch !== "function") return Promise.resolve(true);
+      return fetch(SAVE_API, {
+        method: "PUT", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ game: GAME, key: k, value: v })
+      }).then(function (r) { if (r.status === 401) store.account = false; else store.account = r.ok; return true; })
+        .catch(function () { return true; });
+    }
+  };
+})();
+
+var BEST = {
+  derby: { homers: 0, longest: 0, score: 0 },
+  gauntlet: { streak: 0, tier: 0, score: 0 },
+  rush: { homers: 0, score: 0 },
+  duel: { played: 0 }
+};
+function saveBest() { try { store.set(SKEY, JSON.stringify(BEST)); } catch (e) { } }
+function loadBest() {
+  return Promise.resolve(store.get(SKEY)).then(function (raw) {
+    if (!raw) return false;
+    try {
+      var o = JSON.parse(raw), m, k;
+      for (m in BEST) if (o[m]) for (k in BEST[m]) if (typeof o[m][k] === "number") BEST[m][k] = o[m][k];
+      return true;
+    } catch (e) { return false; }
+  }).catch(function () { return false; });
+}
+
+/* ---------------- modes ---------------- */
+var MODES = {
+  derby: {
+    id: "derby", name: "DERBY", players: 1, outs: 10,
+    line1: "TEN OUTS. ANYTHING THAT IS NOT",
+    line2: "A HOME RUN IS ONE OF THEM.",
+    start: function (G) { G.tier = 2; G.outsLeft = 10; }
+  },
+  gauntlet: {
+    id: "gauntlet", name: "GAUNTLET", players: 1, outs: 1,
+    line1: "EVERY HOME RUN BRINGS A NASTIER",
+    line2: "ARM. ONE OUT AND YOU ARE DONE.",
+    start: function (G) { G.tier = 0; G.outsLeft = 1; }
+  },
+  duel: {
+    id: "duel", name: "TWO-PLAYER DERBY", players: 2, outs: 5,
+    line1: "FIVE OUTS EACH, TAKEN IN TURNS",
+    line2: "ON ONE DEVICE. MOST BOMBS WINS.",
+    start: function (G) { G.tier = 2; G.outsLeft = 5; G.turn = 0; }
+  },
+  rush: {
+    id: "rush", name: "60 SECOND RUSH", players: 1, outs: 999,
+    line1: "SWING AWAY AGAINST THE MACHINE.",
+    line2: "A BOMB BUYS TIME, AN OUT COSTS IT.",
+    start: function (G) { G.tier = 1; G.outsLeft = 999; G.clock = 60; }
+  }
+};
+
+/* ---------------- state ---------------- */
+function newGame(mode) {
+  var G = {
+    mode: mode, phase: "wind", seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0,
+    tier: 0, outsLeft: 10, clock: 0,
+    pitches: 0, swings: 0, homers: 0, score: 0, streak: 0, bestStreak: 0, longest: 0,
+    balls: 0, strikes: 0,
+    pciX: 0, pciY: PLATE_Y,
+    holding: false, loadT: 0, power: 0, released: false, releaseAt: 0,
+    pitch: null, ball: null, result: null, resultT: 0, anim: 0, windT: 0, flightT: 0,
+    sky: "day", lastCall: null,
+    shake: 0, flash: 0, parts: [], trail: [], notice: null, noticeT: 0,
+    players: null, turn: 0, winner: -1, pass: false
+  };
+  MODES[mode].start(G);
+  if (MODES[mode].players === 2) {
+    G.players = [
+      { name: "PLAYER 1", kit: 0, homers: 0, outs: 0, longest: 0 },
+      { name: "PLAYER 2", kit: 1, homers: 0, outs: 0, longest: 0 }
+    ];
+  }
+  G.sky = mode === "duel" ? "dusk" : "day";
+  return G;
+}
+function batter(G) { return G.players ? G.players[G.turn] : null; }
+
+/* ---------------- throwing one ---------------- */
+function newPitch(G) {
+  var P = pitcherOf(G);
+  var s = G.seed + G.pitches * 7919;
+  var type = pickPitch(G, s + 1);
+
+  /* Where he means to put it. Good arms work the edges and throw a
+     share of it out of the zone on purpose. */
+  var junk = rnd(s + 3) < P.junk;
+  var tx, ty;
+  if (junk) {
+    var side = rnd(s + 5) < 0.5 ? -1 : 1;
+    tx = side * (ZONE_W + 0.10 + rnd(s + 7) * 0.16);
+    ty = ZONE_LO + rnd(s + 9) * (ZONE_HI - ZONE_LO);
+    if (rnd(s + 11) < 0.4) { tx = (rnd(s + 13) * 2 - 1) * ZONE_W; ty = rnd(s + 15) < 0.5 ? ZONE_LO - 0.16 : ZONE_HI + 0.16; }
+  } else {
+    var edge = 0.55 + P.cmd * 0.4;
+    tx = (rnd(s + 17) * 2 - 1) * ZONE_W * edge;
+    ty = ZONE_LO + 0.1 + rnd(s + 19) * (ZONE_HI - ZONE_LO - 0.2);
+  }
+  /* command slop */
+  var slop = (1 - P.cmd) * 0.34;
+  tx += (rnd(s + 23) * 2 - 1) * slop;
+  ty += (rnd(s + 29) * 2 - 1) * slop;
+
+  var flight = P.t * type.tMul;
+  var bx = type.bx * P.brk, by = type.by * P.brk;
+
+  /* Solve the release so that break and gravity land it on the spot. */
+  var z0 = MOUND_Z, y0 = 1.72, x0 = 0.35;
+  var vz = -(z0) / flight;
+  var vx = (tx - x0 - 0.5 * bx * flight * flight) / flight;
+  var vy = (ty - y0 - 0.5 * (by - GRAV) * flight * flight) / flight;
+
+  G.pitch = {
+    type: type, flight: flight, bx: bx, by: by,
+    tx: tx, ty: ty, junk: junk,
+    strike: Math.abs(tx) <= ZONE_W && ty >= ZONE_LO && ty <= ZONE_HI,
+    mph: Math.round((20.17 / flight) / 0.489)
+  };
+  G.ball = { x: x0, y: y0, z: z0, vx: vx, vy: vy, vz: vz, t: 0, live: true, hit: false };
+  G.trail = [];
+  G.released = false;
+  G.flightT = 0;
+}
+
+function stepPitch(G, dt) {
+  var b = G.ball, p = G.pitch;
+  if (!b || !b.live || b.hit) return;
+  b.vx += p.bx * dt;
+  b.vy += (p.by - GRAV) * dt;
+  b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+  b.t += dt;
+  if (b.z <= 0 && !b.crossed) { b.crossed = true; b.plateX = b.x; b.plateY = b.y; }
+  if (b.z < -4.6) b.live = false;
+}
+
+/* ---------------- the swing ---------------- */
+var SPRAY_MAX = 44 * Math.PI / 180;
+
+function swing(G) {
+  var P = pitcherOf(G), b = G.ball, p = G.pitch;
+  G.swings++;
+  var tContact = p.flight;                 /* when the ball reaches the plate */
+  var timingErr = b.t - tContact;          /* minus is early, plus is late */
+  var tq = 1 - Math.abs(timingErr) / P.win;
+
+  /* where the ball actually is at the plate */
+  var px = b.crossed ? b.plateX : p.tx;
+  var py = b.crossed ? b.plateY : p.ty;
+  var dx = px - G.pciX, dy = py - G.pciY;
+  var miss = Math.sqrt(dx * dx + dy * dy);
+  var pq = 1 - miss / (P.pci + BALL_R);
+
+  if (tq <= 0 || pq <= 0) return whiff(G, timingErr, miss);
+
+  var power = G.power;
+  var quality = 0.46 * tq + 0.34 * pq + 0.20 * power;
+  var exit = 13.5 + 14.2 * quality;        /* yards per second off the bat */
+
+  /* Catch it under the middle and it climbs. On top of it and it
+     never leaves the infield. */
+  var under = dy;                          /* ball above the sight means you got under it */
+  var launch = 16 + under * 92 + (1 - power) * -4;
+  launch = Math.max(-14, Math.min(58, launch));
+
+  var spray = timingErr / P.win * SPRAY_MAX;   /* early is out in front, which is pulled */
+  spray = Math.max(-Math.PI / 2.6, Math.min(Math.PI / 2.6, spray));
+
+  var rad = launch * Math.PI / 180;
+  var dist = (exit * exit) * Math.sin(2 * Math.max(0.02, rad)) / GRAV;
+  if (launch <= 0) dist = exit * 0.9;       /* a grounder does not carry */
+
+  G.ball.hit = true;
+  G.ball.live = true;
+  G.hit = {
+    exit: exit, launch: launch, spray: spray, dist: dist,
+    tq: tq, pq: pq, power: power, timingErr: timingErr, miss: miss
+  };
+  /* re-launch the ball from the plate on its new path */
+  var vy0 = exit * Math.sin(rad);
+  var vh = exit * Math.cos(rad);
+  G.ball.x = px; G.ball.y = Math.max(0.1, py); G.ball.z = 0;
+  G.ball.vx = vh * Math.sin(spray);
+  G.ball.vz = vh * Math.cos(spray);
+  G.ball.vy = vy0;
+  G.ball.t = 0;
+  G.trail = [];
+  G.phase = "flight";
+  G.flightT = 0;
+  return null;
+}
+
+function whiff(G, timingErr, miss) {
+  G.ball.hit = false;
+  G.hit = null;
+  addStrike(G, "SWING AND A MISS");
+  return "miss";
+}
+
+function stepFlight(G, dt) {
+  var b = G.ball;
+  if (!b || !b.live) return;
+  b.vy -= GRAV * dt;
+  b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+  b.t += dt;
+  if (b.y <= 0.05 && b.vy < 0) { b.y = 0.05; b.live = false; }
+  if (b.t > 7) b.live = false;
+}
+
+/* ---------------- calling it ---------------- */
+function judgeHit(G) {
+  var h = G.hit, b = G.ball;
+  var ang = Math.atan2(b.x, Math.max(0.01, b.z));
+  var travelled = Math.sqrt(b.x * b.x + b.z * b.z);
+  var foul = Math.abs(ang) > Math.PI / 4;
+  var wall = fenceAt(ang);
+  var r = { kind: "", homer: false, feet: Math.round(travelled * FT_PER_YD), ang: ang };
+
+  if (foul) r.kind = "foul";
+  else if (h.launch < 5) r.kind = "ground";
+  else if (h.launch > 46) r.kind = "pop";
+  else if (travelled >= wall) { r.kind = "homer"; r.homer = true; }
+  else if (travelled >= wall - 4) r.kind = "track";
+  else r.kind = "fly";
+  return r;
+}
+
+var CALL_TEXT = {
+  homer: "GONE!", track: "OFF THE WARNING TRACK", fly: "CAUGHT",
+  ground: "ROLLED OVER IT", pop: "POPPED IT UP", foul: "FOUL BALL"
+};
+
+function addStrike(G, why) {
+  G.strikes++;
+  G.lastCall = why || "STRIKE";
+  if (G.strikes >= 3) { G.strikes = 0; G.balls = 0; recordOut(G, "STRUCK OUT"); return true; }
+  return false;
+}
+function addBall(G) {
+  G.balls++;
+  G.lastCall = "BALL";
+  if (G.balls >= 4) { G.balls = 0; G.strikes = 0; G.lastCall = "WALK"; return true; }
+  return false;
+}
+function recordOut(G, why) {
+  G.streak = 0;
+  G.lastCall = why || "OUT";
+  if (G.players) {
+    G.players[G.turn].outs++;
+    if (G.players[G.turn].outs >= MODES.duel.outs) G.turnDone = true;
+  } else if (G.mode === "rush") {
+    G.clock -= 4;
+  } else {
+    G.outsLeft--;
+  }
+}
+function recordHomer(G, feet) {
+  G.homers++;
+  G.streak++;
+  if (G.streak > G.bestStreak) G.bestStreak = G.streak;
+  if (feet > G.longest) G.longest = feet;
+  var pts = 400 + Math.max(0, feet - 330) * 6 + (G.streak - 1) * 120;
+  G.score += pts;
+  if (G.players) {
+    var p = G.players[G.turn];
+    p.homers++;
+    if (feet > p.longest) p.longest = feet;
+  }
+  if (G.mode === "gauntlet") {
+    var was = G.tier;
+    G.tier = Math.min(PITCHERS.length - 1, G.tier + 1);
+    if (was !== G.tier) G.notice = pitcherOf(G).name + " IS UP";
+  } else if (G.mode === "rush") {
+    G.clock = Math.min(75, G.clock + 3);
+    if (G.homers % 4 === 0) G.tier = Math.min(PITCHERS.length - 1, G.tier + 1);
+  } else if (G.homers % 5 === 0) {
+    G.tier = Math.min(PITCHERS.length - 1, G.tier + 1);
+  }
+  return pts;
+}
+
+/* Turn the flight into a verdict and apply it. */
+function settle(G) {
+  var r = judgeHit(G);
+  var pts = 0, notes = [];
+  if (r.homer) {
+    pts = recordHomer(G, r.feet);
+    if (r.feet >= 450) notes.push("UPPER DECK");
+    else if (r.feet >= 420) notes.push("NO DOUBT ABOUT IT");
+    if (G.hit.tq > 0.9 && G.hit.pq > 0.85) notes.push("BARRELLED  " + Math.round(55 + (G.hit.exit - 13.5) * 3.4) + " MPH");
+    if (G.streak > 1) notes.push("STREAK " + G.streak);
+    G.balls = 0; G.strikes = 0;
+  } else if (r.kind === "foul") {
+    if (G.strikes < 2) addStrike(G, "FOUL BALL");
+    else G.lastCall = "FOUL BALL";
+  } else {
+    recordOut(G, CALL_TEXT[r.kind]);
+    G.balls = 0; G.strikes = 0;
+  }
+  G.result = {
+    kind: r.kind, homer: r.homer, text: CALL_TEXT[r.kind] || "OUT",
+    feet: r.feet, pts: pts, notes: notes,
+    exit: G.hit ? Math.round(55 + (G.hit.exit - 13.5) * 3.4) : 0,
+    launch: G.hit ? Math.round(G.hit.launch) : 0
+  };
+  G.resultT = 0;
+  G.phase = "result";
+  return G.result;
+}
+
+/* a pitch the batter let go by */
+function settleTake(G) {
+  var strike = G.pitch.strike;
+  var walked = false;
+  if (strike) addStrike(G, "CALLED STRIKE");
+  else walked = addBall(G);
+  G.result = {
+    kind: strike ? "called" : (walked ? "walk" : "ball"),
+    homer: false, text: strike ? "CALLED STRIKE" : (walked ? "BALL FOUR" : "BALL"),
+    feet: 0, pts: 0, notes: [], exit: 0, launch: 0, take: true
+  };
+  G.resultT = 0;
+  G.phase = "result";
+  return G.result;
+}
+
+function turnOver(G) { return !!G.turnDone; }
+function runOver(G) {
+  if (G.mode === "duel") return G.winner >= 0;
+  if (G.mode === "rush") return G.clock <= 0;
+  return G.outsLeft <= 0;
+}
+
+function advanceDuel(G) {
+  var a = G.players[0], b = G.players[1];
+  G.turnDone = false;
+  if (a.outs >= 5 && b.outs >= 5) {
+    G.winner = a.homers === b.homers ? (a.longest >= b.longest ? 0 : 1) : (a.homers > b.homers ? 0 : 1);
+    return true;
+  }
+  if (a.outs >= 5) G.turn = 1;
+  else if (b.outs >= 5) G.turn = 0;
+  else G.turn = G.turn === 0 ? 1 : 0;
+  G.pass = true;
+  G.balls = 0; G.strikes = 0; G.streak = 0;
+  return false;
+}
+
+function recordBest(G) {
+  var improved = false;
+  if (G.mode === "derby") {
+    if (G.homers > BEST.derby.homers) { BEST.derby.homers = G.homers; improved = true; }
+    if (G.longest > BEST.derby.longest) { BEST.derby.longest = G.longest; improved = true; }
+    if (G.score > BEST.derby.score) { BEST.derby.score = G.score; improved = true; }
+  } else if (G.mode === "gauntlet") {
+    if (G.bestStreak > BEST.gauntlet.streak) { BEST.gauntlet.streak = G.bestStreak; improved = true; }
+    if (G.tier > BEST.gauntlet.tier) { BEST.gauntlet.tier = G.tier; improved = true; }
+    if (G.score > BEST.gauntlet.score) { BEST.gauntlet.score = G.score; improved = true; }
+  } else if (G.mode === "rush") {
+    if (G.homers > BEST.rush.homers) { BEST.rush.homers = G.homers; improved = true; }
+    if (G.score > BEST.rush.score) { BEST.rush.score = G.score; improved = true; }
+  } else { BEST.duel.played++; improved = true; }
+  if (improved) saveBest();
+  return improved;
+}
+
+function nextPitch(G) {
+  G.pitches++;
+  G.pitch = null; G.ball = null; G.hit = null; G.result = null;
+  G.holding = false; G.loadT = 0; G.power = 0; G.released = false;
+  G.trail = [];
+  G.phase = "wind";
+  G.windT = 0;
+  G.pciY = Math.max(ZONE_LO - 0.25, Math.min(ZONE_HI + 0.25, G.pciY));
+}
+/* ============================================================
+   UPPER DECK — figures, interface, loop
+   ============================================================ */
+
+var PANEL_Y = 140;
+var HUD_H = 22;
+var UIst = { t: 0 };
+
+/* ---------------- the people ----------------
+   Drawn in screen space. At four yards from the lens a real catcher
+   would be three screens tall, so these are staged, not projected. */
+function fieldCam(G) {
+  return G.phase === "flight" || (G.phase === "result" && G.result && G.result.homer);
+}
+function drawBackstop(G) {
+  if (fieldCam(G)) return;
+  drawSprite(UMP, 126, 104, umpPal(), false, 2);
+  drawSprite(CATCHER, 142, 112, catcherPal(), false, 2);
+}
+function drawHitter(G) {
+  if (fieldCam(G)) return;
+  var kit = KITS[G.players ? G.players[G.turn].kit : 0];
+  var f = 0;
+  if (G.phase === "result" && G.result && G.result.homer) f = 4;
+  else if (G.swingT != null && G.swingT < 0.10) f = 2;
+  else if (G.swingT != null) f = 3;
+  else if (G.holding) f = 1;
+  drawSprite(HITTER[f], 79, 74, hitterPal(kit), false, 3);
+}
+function drawPitcher(G) {
+  if (fieldCam(G)) return;
+  var p = proj(0.35, 0, MOUND_Z + 0.4);
+  var sc = Math.max(1, Math.round(p.s * 0.115));
+  var f = 0;
+  if (G.phase === "wind") f = G.windT > 0.45 ? 1 : 0;
+  else f = 2;
+  drawSprite(PITCHER[f], Math.round(p.x) - 5 * sc, Math.round(p.y) - 16 * sc, pitcherPal(), false, sc);
+}
+
+/* ---------------- the strike zone and your sight ---------------- */
+function zoneRect() {
+  var tl = proj(-ZONE_W, ZONE_HI, 0), br = proj(ZONE_W, ZONE_LO, 0);
+  return { x0: Math.round(tl.x), y0: Math.round(tl.y), x1: Math.round(br.x), y1: Math.round(br.y) };
+}
+function drawZone(G) {
+  if (G.phase === "flight" || G.phase === "result") return;
+  var z = zoneRect();
+  var col = "rgba(242,246,255,0.5)";
+  var i;
+  for (i = z.x0; i <= z.x1; i += 3) { pxc(X, i, z.y0, 2, 1, col); pxc(X, i, z.y1, 2, 1, col); }
+  for (i = z.y0; i <= z.y1; i += 3) { pxc(X, z.x0, i, 1, 2, col); pxc(X, z.x1, i, 1, 2, col); }
+  /* the thirds, faint */
+  var inner = "rgba(242,246,255,0.16)";
+  for (i = 1; i <= 2; i++) {
+    var xx = Math.round(z.x0 + (z.x1 - z.x0) * i / 3);
+    var yy = Math.round(z.y0 + (z.y1 - z.y0) * i / 3);
+    for (var k = z.y0; k <= z.y1; k += 2) pxc(X, xx, k, 1, 1, inner);
+    for (var m = z.x0; m <= z.x1; m += 2) pxc(X, m, yy, 1, 1, inner);
+  }
+}
+
+function drawPCI(G) {
+  if (G.phase === "flight" || G.phase === "result") return;
+  var P = pitcherOf(G);
+  var c = proj(G.pciX, G.pciY, 0);
+  var rx = Math.round(P.pci * c.s), ry = Math.round(P.pci * c.s);
+  var cx = Math.round(c.x), cy = Math.round(c.y);
+  /* a bracket in each corner, the way a hitting cursor reads */
+  var col = G.holding ? "#f0c04a" : "#9fe8ff";
+  var dark = "#101828";
+  var arm = Math.max(3, Math.round(rx * 0.55));
+  function corner(sx, sy) {
+    var x = cx + sx * rx, y = cy + sy * ry;
+    pxc(X, x - (sx < 0 ? 0 : arm), y - 1, arm, 3, dark);
+    pxc(X, x - 1, y - (sy < 0 ? 0 : arm), 3, arm, dark);
+    pxc(X, x - (sx < 0 ? 0 : arm - 1), y, arm - 1, 1, col);
+    pxc(X, x, y - (sy < 0 ? 0 : arm - 1), 1, arm - 1, col);
+  }
+  corner(-1, -1); corner(1, -1); corner(-1, 1); corner(1, 1);
+  pxc(X, cx - 1, cy - 1, 3, 3, dark);
+  pxc(X, cx, cy, 1, 1, col);
+  /* while loading, a ring tightens to show the swing gathering */
+  if (G.holding && G.power > 0.02) {
+    var r2 = Math.round(rx + 7 - G.power * 7);
+    for (var a = 0; a < 16; a++) {
+      var th = a / 16 * Math.PI * 2;
+      pxc(X, Math.round(cx + Math.cos(th) * r2), Math.round(cy + Math.sin(th) * r2 * 0.95), 1, 1,
+        G.power >= 0.995 ? "#5ad46a" : "#f0c04a");
+    }
+  }
+}
+
+/* ---------------- the ball ---------------- */
+function drawBall(G) {
+  var b = G.ball;
+  if (!b) return;
+  var i;
+  for (i = 0; i < G.trail.length; i++) {
+    var t = G.trail[i], a = (i + 1) / G.trail.length;
+    var pt = proj(t.x, t.y, t.z);
+    if (pt.y < -10 || pt.y > H) continue;
+    X.globalAlpha = a * 0.45;
+    var ts = Math.max(1, Math.round(pt.s * 0.02));
+    pxc(X, Math.round(pt.x - ts / 2), Math.round(pt.y - ts / 2), ts, ts, b.hit ? "#ffd9a8" : "#cfd8ef");
+    X.globalAlpha = 1;
+  }
+  if (b.hit && b.live) {
+    var sh = proj(b.x, 0, b.z);
+    if (sh.y > cam.horizon && sh.y < H) {
+      X.globalAlpha = Math.max(0.1, 0.4 - b.y * 0.02);
+      var sw = Math.max(1, Math.round(sh.s * 0.1));
+      pxc(X, Math.round(sh.x - sw / 2), Math.round(sh.y), sw, Math.max(1, Math.round(sw * 0.5)), "#17401d");
+      X.globalAlpha = 1;
+    }
+  }
+  var p = proj(b.x, b.y, b.z);
+  if (p.y < -14 || p.y > H + 14) return;
+  var size = Math.max(4, p.s * 0.092);
+  if (size >= 9) drawSprite(BALL_BIG, Math.round(p.x - 8), Math.round(p.y - 8), ballPal(), false, 2);
+  else if (size >= 6) drawSprite(BALL_BIG, Math.round(p.x - 4), Math.round(p.y - 4), ballPal(), false, 1);
+  else if (size >= 4) drawSprite(BALL_MID, Math.round(p.x - 2.5), Math.round(p.y - 2.5), ballPal(), false, 1);
+  else {
+    var s2 = Math.max(3, Math.round(size));
+    pxc(X, Math.round(p.x - s2 / 2) - 1, Math.round(p.y - s2 / 2) - 1, s2 + 2, s2 + 2, "#141a2e");
+    pxc(X, Math.round(p.x - s2 / 2), Math.round(p.y - s2 / 2), s2, s2, "#f8fbff");
+  }
+}
+
+/* ---------------- particles ---------------- */
+function burst(G, x, y, n, colors, spread, life) {
+  for (var i = 0; i < n; i++) G.parts.push({
+    x: x, y: y, vx: (Math.random() * 2 - 1) * spread, vy: (Math.random() * 2 - 1) * spread - spread * 0.4,
+    g: 120 + Math.random() * 90, t: 0, life: life || (0.5 + Math.random() * 0.6),
+    c: colors[Math.floor(Math.random() * colors.length)]
+  });
+}
+function stepParts(G, dt) {
+  for (var i = G.parts.length - 1; i >= 0; i--) {
+    var p = G.parts[i];
+    p.t += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.t > p.life) G.parts.splice(i, 1);
+  }
+}
+function drawParts(G) {
+  for (var i = 0; i < G.parts.length; i++) {
+    var p = G.parts[i];
+    X.globalAlpha = Math.max(0, 1 - p.t / p.life);
+    pxc(X, p.x, p.y, 2, 2, p.c);
+    X.globalAlpha = 1;
+  }
+}
+
+/* ---------------- status bar ---------------- */
+function drawHud(G) {
+  pxc(X, 0, 0, W, HUD_H, "rgba(5,7,15,0.84)");
+  pxc(X, 0, HUD_H, W, 1, "#4f3e23");
+  textAt(MODES[G.mode].name, 4, 2, "#f0c04a", 1, 1);
+
+  if (G.mode === "duel") {
+    textCenter(G.players[G.turn].name + " AT BAT", 160, 2, G.turn === 0 ? "#ff9a8a" : "#9ab8ff", 1, 1);
+    var a = G.players[0], b = G.players[1];
+    var tot = a.homers + " - " + b.homers;
+    textAt(tot, W - 4 - textWidth(tot, 1, 1), 2, "#f2f6ff", 1, 1);
+  } else {
+    textCenter("SCORE " + G.score, 160, 2, "#e8ecf7", 1, 1);
+    var right = G.mode === "rush" ? "TIME " + Math.max(0, Math.ceil(G.clock)) : "HR " + G.homers;
+    textAt(right, W - 4 - textWidth(right, 1, 1), 2, "#cfd8ef", 1, 1);
+  }
+
+  var P = pitcherOf(G);
+  textAt(P.name, 4, 12, "#9fe8ff", 1, 1);
+  var bx = 4 + textWidth(P.name, 1, 1) + 8;
+  textAt("VELO", bx, 12, "#6b6246", 1, 1);
+  miniBar(bx + 26, 12, 20, (0.84 - P.t) / 0.46);
+  textAt("MOVE", bx + 52, 12, "#6b6246", 1, 1);
+  miniBar(bx + 78, 12, 20, P.brk / 1.35);
+  if (G.pitch && (G.phase === "pitch" || G.phase === "flight" || G.phase === "result")) {
+    var mp = G.pitch.mph + " MPH";
+    textAt(mp, W - 4 - textWidth(mp, 1, 1), 12, G.pitch.type.col, 1, 1);
+  }
+}
+function miniBar(x, y, w, f) {
+  pxc(X, x, y, w, 5, "#1a1b14");
+  pxc(X, x, y, Math.max(1, Math.round(w * Math.max(0, Math.min(1, f)))), 5, "#9ad46a");
+  pxc(X, x, y, w, 1, "rgba(255,255,255,0.12)");
+}
+
+/* ---------------- the panel under the field ---------------- */
+function drawPanel(G) {
+  pxc(X, 0, PANEL_Y, W, H - PANEL_Y, "#140f08");
+  pxc(X, 0, PANEL_Y, W, 1, "#4f3e23");
+  pxc(X, 0, PANEL_Y + 1, W, 1, "#241a0e");
+
+  /* --- column one: the count --- */
+  textAt(G.balls + "-" + G.strikes, 4, PANEL_Y + 4, "#f2f6ff", 2, 1);
+  textAt("COUNT", 4, PANEL_Y + 20, "#6b6246", 1, 1);
+
+  /* --- column two: outs, or the clock --- */
+  if (G.mode === "rush") {
+    var cl = Math.max(0, Math.ceil(G.clock)) + "S";
+    textAt(cl, 46, PANEL_Y + 4, G.clock < 10 ? "#e05c5c" : "#cfd8ef", 2, 1);
+    textAt("LEFT", 46, PANEL_Y + 20, "#6b6246", 1, 1);
+  } else {
+    var total = G.players ? 5 : MODES[G.mode].outs;
+    var used = G.players ? G.players[G.turn].outs : total - G.outsLeft;
+    var shown = Math.min(total, 10);
+    for (var i = 0; i < shown; i++) {
+      pxc(X, 46 + i * 5, PANEL_Y + 6, 4, 4, i < used ? "#e05c5c" : "#2e2a1c");
+    }
+    textAt("OUTS", 46, PANEL_Y + 20, "#6b6246", 1, 1);
+  }
+
+  /* --- column three: the load meter and what just happened --- */
+  var lx = 100, bx = 126, bw = 186;
+  textAt("LOAD", lx, PANEL_Y + 5, "#6b6246", 1, 1);
+  pxc(X, bx, PANEL_Y + 3, bw, 10, "#05070f");
+  pxc(X, bx + 1, PANEL_Y + 4, bw - 2, 8, "#1a1b14");
+  pxc(X, bx + 1, PANEL_Y + 4, Math.round((bw - 2) * G.power), 8,
+    G.power >= 0.995 ? "#5ad46a" : "#f0c04a");
+  pxc(X, bx + 1 + Math.round((bw - 2) * 0.995), PANEL_Y + 1, 1, 14, "#f2f6ff");
+
+  if (G.lastCall) textAt(G.lastCall, lx, PANEL_Y + 18, callColour(G.lastCall), 1, 1);
+
+  var showPrompt = G.phase === "result" && G.resultT > 0.9;
+  if (G.result && !G.result.take && G.result.exit) {
+    textAt(G.result.exit + " MPH \u00b7 " + G.result.launch + "\u00b0 \u00b7 " + G.result.feet + "FT",
+      lx, PANEL_Y + 29, "#9fadd4", 1, 1);
+  } else if (!showPrompt && (G.phase === "pitch" || G.phase === "wind")) {
+    textAt(G.holding ? "LET GO AS IT REACHES YOU" : "HOLD TO LOAD", lx, PANEL_Y + 29, "#6b6246", 1, 1);
+  }
+  if (showPrompt) {
+    var m = "NEXT PITCH";
+    textAt(m, W - 4 - textWidth(m, 1, 1), PANEL_Y + 29,
+      (Math.floor(G.resultT * 2) % 2 ? "#9fadd4" : "#5d678c"), 1, 1);
+  }
+}
+
+function callColour(t) {
+  if (/GONE|BOMB/.test(t)) return "#5ad46a";
+  if (/BALL$|WALK|BALL FOUR/.test(t)) return "#9fe8ff";
+  if (/STRIKE|MISS|OUT|CAUGHT|ROLLED|POPPED/.test(t)) return "#e05c5c";
+  return "#cfd8ef";
+}
+
+/* ---------------- result banner ---------------- */
+function drawBanner(G) {
+  if (G.phase !== "result" || !G.result) return;
+  var r = G.result, t = G.resultT;
+  var slide = Math.min(1, t / 0.13);
+  var y = Math.round(40 + (1 - slide) * -36);
+  var col = r.homer ? "#5ad46a" : (r.take ? "#9fe8ff" : "#e05c5c");
+  pxc(X, 0, y - 6, W, 26, "rgba(5,7,15,0.86)");
+  pxc(X, 0, y - 6, W, 1, col);
+  pxc(X, 0, y + 19, W, 1, col);
+  textCenterShadow(r.homer ? "GONE!" : r.text, 160, y, col, "#05070f", r.homer ? 3 : 2, 1);
+  if (r.homer) {
+    /* Both lines get their own strip; a crowd makes a poor background
+       for text, and they were sitting almost on top of each other. */
+    var fy = y + 24;
+    pxc(X, 0, fy - 3, W, 20, "rgba(5,7,15,0.74)");
+    textCenterShadow(r.feet + " FEET", 160, fy, "#f0c04a", "#05070f", 2, 1);
+    if (r.notes.length) {
+      var list = r.notes.slice(), line = list.join("   ");
+      while (list.length > 1 && textWidth(line, 1, 1) > W - 12) { list.pop(); line = list.join("   "); }
+      var ny = fy + 20;
+      pxc(X, 0, ny - 2, W, 11, "rgba(5,7,15,0.74)");
+      textCenter(line, 160, ny, "#9ad46a", 1, 1);
+    }
+  }
+}
+
+/* ---------------- notice ---------------- */
+function drawNotice(G) {
+  if (!G.notice) return;
+  var a = G.noticeT < 1.8 ? 1 : Math.max(0, 1 - (G.noticeT - 1.8) * 2);
+  X.globalAlpha = a;
+  pxc(X, 0, 96, W, 18, "rgba(5,7,15,0.88)");
+  pxc(X, 0, 96, W, 1, "#f0c04a"); pxc(X, 0, 113, W, 1, "#f0c04a");
+  textCenterShadow(G.notice, 160, 100, "#f0c04a", "#05070f", 2, 1);
+  X.globalAlpha = 1;
+}
+
+/* ---------------- pass the device ---------------- */
+function drawPass(G) {
+  pxc(X, 0, 0, W, H, "rgba(5,7,15,0.93)");
+  var p = G.players[G.turn];
+  textCenterShadow("PASS THE BAT", 160, 36, "#f0c04a", "#5a3d00", 2, 1);
+  textCenter(p.name, 160, 60, p.kit === 0 ? "#ff9a8a" : "#9ab8ff", 3, 1);
+  textCenter("IS UP", 160, 84, "#cfd8ef", 1, 1);
+  var a = G.players[0], b = G.players[1];
+  textCenter(a.homers + "  –  " + b.homers, 160, 100, "#f2f6ff", 2, 1);
+  textCenter(a.outs + " OUTS  ·  " + b.outs + " OUTS", 160, 118, "#6b769b", 1, 1);
+  if (Math.floor(UIst.t * 2) % 2 === 0) textCenter("PRESS WHEN READY", 160, 136, "#9fadd4", 1, 1);
+}
+
+/* ============================================================
+   MENU — a list and a detail panel, so nothing sits on anything
+   ============================================================ */
+var menu = { sel: 0 };
+var MODE_LIST = ["derby", "gauntlet", "duel", "rush"];
+var menuBg = null;
+
+function drawMenu() {
+  if (!menuBg) {
+    camSet(CAM_FIELD);
+    drawPark({ sky: "dusk", hideBoard: true });
+    menuBg = document.createElement("canvas");
+    menuBg.width = W; menuBg.height = H;
+    menuBg.getContext("2d").drawImage(CV, 0, 0);
+  }
+  X.drawImage(menuBg, 0, 0);
+  pxc(X, 0, 0, W, H, "rgba(8,7,16,0.62)");
+
+  pxc(X, 0, 4, W, 48, "rgba(5,7,15,0.55)");
+  pxc(X, 40, 56, 240, 96, "rgba(5,7,15,0.62)");
+  pxc(X, 0, 152, W, 28, "rgba(5,7,15,0.72)");
+  textCenterShadow("UPPER DECK", 160, 12, "#f0c04a", "#6b4600", 4, 1);
+  textCenter("HOME RUN DERBY", 160, 45, "#9fadd4", 1, 1);
+  pxc(X, 58, 54, 204, 1, "#4f3e23");
+
+  /* one line per mode, nothing wrapped */
+  for (var i = 0; i < MODE_LIST.length; i++) {
+    var id = MODE_LIST[i], m = MODES[id], y = 60 + i * 12, on = menu.sel === i;
+    if (on) pxc(X, 46, y - 2, 228, 11, "#2a2110");
+    textAt(on ? "▸" : " ", 50, y, "#f0c04a", 1, 1);
+    textAt(m.name, 60, y, on ? "#f0c04a" : "#b9b196", 1, 1);
+    if (m.players === 2) textAt("2P", 60 + textWidth(m.name, 1, 1) + 6, y, "#5ad46a", 1, 1);
+    var bt = bestLine(id);
+    if (bt) textAt(bt, 268 - textWidth(bt, 1, 1), y, on ? "#9ad46a" : "#5c6a4a", 1, 1);
+  }
+
+  /* detail for the highlighted one */
+  var sel = MODES[MODE_LIST[menu.sel]];
+  var py = 114;
+  pxc(X, 46, py, 228, 34, "rgba(5,7,15,0.8)");
+  pxc(X, 46, py, 2, 34, "#f0c04a");
+  textAt(sel.line1, 54, py + 5, "#cfd8ef", 1, 1);
+  textAt(sel.line2, 54, py + 14, "#cfd8ef", 1, 1);
+  var detail = bestDetail(MODE_LIST[menu.sel]);
+  textAt(detail, 54, py + 24, "#7f8a66", 1, 1);
+
+  if (Math.floor(UIst.t * 2) % 2 === 0)
+    textCenter("↑ ↓ CHOOSE     PRESS TO PLAY", 160, 158, "#9fadd4", 1, 1);
+  textCenter("ARROWS AIM THE SIGHT  ·  HOLD AND RELEASE TO SWING", 160, 170, "#5c5540", 1, 1);
+}
+function bestLine(id) {
+  var b = BEST[id];
+  if (id === "derby") return b.homers ? b.homers + " HR" : "";
+  if (id === "gauntlet") return b.streak ? b.streak + " IN A ROW" : "";
+  if (id === "rush") return b.homers ? b.homers + " HR" : "";
+  return b.played ? b.played + " PLAYED" : "";
+}
+function bestDetail(id) {
+  var b = BEST[id];
+  if (id === "derby") return b.homers ? "BEST: " + b.homers + " HOME RUNS, LONGEST " + b.longest + " FT" : "NO DERBY PLAYED YET";
+  if (id === "gauntlet") return b.streak ? "BEST RUN: " + b.streak + ", REACHED " + PITCHERS[b.tier].name : "NO RUN YET";
+  if (id === "rush") return b.homers ? "BEST: " + b.homers + " IN SIXTY SECONDS" : "NO RUSH PLAYED YET";
+  return b.played ? b.played + " DERBIES PLAYED ON THIS DEVICE" : "GRAB SOMEBODY";
+}
+
+/* ---------------- game over ---------------- */
+function drawGameOver(G) {
+  pxc(X, 0, 0, W, H, "rgba(5,7,15,0.94)");
+  pxc(X, 0, 0, W, H, "rgba(5,7,15,0.5)");
+  if (G.mode === "duel") {
+    var wp = G.players[G.winner];
+    textCenterShadow(wp.name + " WINS", 160, 14, "#f0c04a", "#6b4600", 3, 1);
+    textCenter(G.players[0].homers + "  –  " + G.players[1].homers, 160, 44, "#f2f6ff", 3, 1);
+    for (var pi = 0; pi < 2; pi++) {
+      var p = G.players[pi], y = 80 + pi * 14;
+      textAt(p.name, 56, y, pi === 0 ? "#ff9a8a" : "#9ab8ff", 1, 1);
+      textAt(p.homers + " HR", 150, y, "#f2f6ff", 1, 1);
+      textAt("LONGEST " + p.longest + " FT", 196, y, "#9fadd4", 1, 1);
+    }
+    textCenter("PRESS FOR A REMATCH", 160, 134, "#cfd8ef", 1, 1);
+  } else {
+    textCenterShadow(G.mode === "rush" ? "TIME!" : "THAT'S TEN", 160, 14, "#f0c04a", "#6b4600", 3, 1);
+    var rows = [["HOME RUNS", String(G.homers)], ["LONGEST", G.longest + " FT"],
+      ["BEST STREAK", String(G.bestStreak)], ["PITCHER REACHED", pitcherOf(G).name], ["SCORE", String(G.score)]];
+    for (var r = 0; r < rows.length; r++) {
+      var yy = 44 + r * 15;
+      textAt(rows[r][0], 46, yy, "#8d9ac2", 1, 1);
+      var big = r === rows.length - 1;
+      textAt(rows[r][1], 274 - textWidth(rows[r][1], big ? 2 : 1, 1), yy - (big ? 3 : 0),
+        big ? "#f0c04a" : "#e8ecf7", big ? 2 : 1, 1);
+    }
+    if (G.newBest && Math.floor(UIst.t * 4) % 2 === 0) textCenter("NEW PERSONAL BEST", 160, 126, "#5ad46a", 1, 1);
+    textCenter("PRESS TO PLAY AGAIN", 160, 142, "#cfd8ef", 1, 1);
+  }
+  textCenter("ESC FOR THE MENU", 160, 156, "#6b769b", 1, 1);
+  drawParts(G);
+}
+
+/* ============================================================
+   LOOP
+   ============================================================ */
+var G = null, view = "menu", last = 0;
+var WIND_LEN = 1.0;
+
+function startMode(mode) {
+  G = newGame(mode);
+  camSet(CAM_PLATE);
+  nextPitch(G);
+  view = "play";
+}
+
+function update(dt) {
+  UIst.t += dt;
+  if (!G || view !== "play") { if (G) stepParts(G, dt); return; }
+  G.anim += dt;
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 3.2);
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 4);
+  if (G.notice) { G.noticeT += dt; if (G.noticeT > 2.4) { G.notice = null; G.noticeT = 0; } }
+  stepParts(G, dt);
+  if (G.swingT != null) { G.swingT += dt; if (G.swingT > 0.5) G.swingT = null; }
+  if (G.pass) return;
+
+  if (G.mode === "rush" && (G.phase === "wind" || G.phase === "pitch")) {
+    G.clock -= dt;
+    if (G.clock <= 0) { G.clock = 0; endRun(); return; }
+  }
+
+  /* the sight moves whenever the bat is not already through the zone */
+  if (G.phase === "wind" || G.phase === "pitch") {
+    var sx = 0.95 * dt, sy = 0.78 * dt;
+    if (keys.left) G.pciX -= sx;
+    if (keys.right) G.pciX += sx;
+    if (keys.up) G.pciY += sy;
+    if (keys.down) G.pciY -= sy;
+    G.pciX = Math.max(-ZONE_W - 0.30, Math.min(ZONE_W + 0.30, G.pciX));
+    G.pciY = Math.max(ZONE_LO - 0.30, Math.min(ZONE_HI + 0.30, G.pciY));
+    if (G.holding) { G.loadT += dt; G.power = Math.min(1, G.loadT / LOAD_FULL); }
+  }
+
+  if (G.phase === "wind") {
+    camTo(CAM_PLATE, dt, 12);
+    G.windT += dt;
+    if (G.windT >= WIND_LEN) { newPitch(G); G.phase = "pitch"; }
+  } else if (G.phase === "pitch") {
+    camTo(CAM_PLATE, dt, 12);
+    var i;
+    for (i = 0; i < 4; i++) stepPitch(G, dt / 4);
+    if (G.ball) {
+      G.trail.push({ x: G.ball.x, y: G.ball.y, z: G.ball.z });
+      if (G.trail.length > 14) G.trail.shift();
+    }
+    if (G.ball && !G.ball.live && !G.ball.hit) { settleTake(G); }
+  } else if (G.phase === "flight") {
+    /* pull back and frame the ball, the way a broadcast camera would */
+    var target = { focal: CAM_FIELD.focal, horizon: CAM_FIELD.horizon, camY: CAM_FIELD.camY, camZ: CAM_FIELD.camZ };
+    if (G.ball) {
+      var need = (CAM_FIELD.horizon - 24) * (G.ball.z - CAM_FIELD.camZ) / Math.max(0.6, G.ball.y - CAM_FIELD.camY);
+      target.focal = Math.max(120, Math.min(CAM_FIELD.focal, need));
+    }
+    camTo(target, dt, 7);
+    G.flightT += dt;
+    var sub = dt * (G.flightT < 0.35 ? 0.45 : 0.9);
+    for (var k = 0; k < 4; k++) stepFlight(G, sub / 4);
+    if (G.ball) {
+      G.trail.push({ x: G.ball.x, y: G.ball.y, z: G.ball.z });
+      if (G.trail.length > 26) G.trail.shift();
+    }
+    if (G.ball && !G.ball.live) {
+      G.settleT = (G.settleT || 0) + dt;
+      if (G.settleT > 0.4) { G.settleT = null; onCall(settle(G)); }
+    }
+  } else if (G.phase === "result") {
+    camTo(G.result && G.result.homer ? CAM_FIELD : CAM_PLATE, dt, 5);
+    G.resultT += dt;
+  }
+}
+
+function onCall(r) {
+  if (r.homer) {
+    G.shake = 1; G.flash = 0.8;
+    burst(G, 160, 60, 40, ["#f0c04a", "#5ad46a", "#ffffff"], 100, 1.1);
+  } else if (r.kind === "fly" || r.kind === "track") {
+    G.shake = 0.3;
+  }
+}
+
+function startHold(G2) {
+  if (!G2 || (G2.phase !== "wind" && G2.phase !== "pitch")) return;
+  if (G2.released) return;
+  G2.holding = true;
+}
+function releaseHold(G2) {
+  if (!G2 || !G2.holding) return;
+  G2.holding = false;
+  G2.released = true;
+  G2.swingT = 0;
+  if (G2.phase === "wind") {
+    /* swung before he even let go of it */
+    addStrike(G2, "SWUNG AT NOTHING");
+    G2.result = { kind: "air", homer: false, text: "SWUNG AT NOTHING", feet: 0, pts: 0, notes: [], exit: 0, launch: 0, take: true };
+    G2.resultT = 0; G2.phase = "result";
+    return;
+  }
+  if (G2.phase !== "pitch" || !G2.ball) return;
+  var out = swing(G2);
+  if (out === "miss") {
+    G2.result = { kind: "miss", homer: false, text: "SWING AND A MISS", feet: 0, pts: 0, notes: [], exit: 0, launch: 0, take: true };
+    G2.resultT = 0; G2.phase = "result";
+  }
+}
+
+function endRun() {
+  G.newBest = recordBest(G);
+  if (G.newBest || G.mode === "duel") burst(G, 160, 26, 60, ["#f0c04a", "#5ad46a", "#ffffff", "#e05c5c", "#3560c8"], 110, 1.6);
+  view = "over";
+}
+
+function press() {
+  if (view === "menu") { startMode(MODE_LIST[menu.sel]); return; }
+  if (view === "over") { startMode(G.mode); return; }
+  if (!G) return;
+  if (G.pass) { G.pass = false; nextPitch(G); return; }
+  if (G.phase === "result") {
+    if (G.resultT < 0.35) return;
+    if (G.mode === "duel") {
+      if (turnOver(G)) { if (advanceDuel(G)) { endRun(); return; } return; }
+    } else if (runOver(G)) { endRun(); return; }
+    nextPitch(G);
+  }
+}
+
+/* ---------------- draw ---------------- */
+function draw() {
+  if (view === "menu") { drawMenu(); return; }
+  if (!G) return;
+  var sx = 0, sy = 0;
+  if (G.shake > 0) {
+    sx = Math.round((Math.random() * 2 - 1) * G.shake * 4);
+    sy = Math.round((Math.random() * 2 - 1) * G.shake * 3);
+  }
+  X.save();
+  X.translate(sx, sy);
+  drawPark(G);
+  drawPitcher(G);
+  drawZone(G);
+  drawBall(G);
+  drawPCI(G);
+  drawBackstop(G);
+  drawHitter(G);
+  drawParts(G);
+  X.restore();
+
+  if (G.flash > 0) { X.globalAlpha = G.flash * 0.45; pxc(X, 0, 0, W, H, "#ffffff"); X.globalAlpha = 1; }
+
+  if (view === "over") { drawGameOver(G); return; }
+  if (G.pass) { drawPass(G); return; }
+  drawHud(G);
+  drawPanel(G);
+  drawBanner(G);
+  drawNotice(G);
+}
+
+function frame(ts) {
+  if (!last) last = ts;
+  var dt = Math.min(0.05, (ts - last) / 1000);
+  last = ts;
+  update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- input ---------------- */
+var keys = { left: false, right: false, up: false, down: false };
+function setKey(e, down) {
+  var k = e.key;
+  if (k === "ArrowLeft" || k === "a" || k === "A") { keys.left = down; e.preventDefault(); }
+  else if (k === "ArrowRight" || k === "d" || k === "D") { keys.right = down; e.preventDefault(); }
+  else if (k === "ArrowUp" || k === "w" || k === "W") { keys.up = down; e.preventDefault(); }
+  else if (k === "ArrowDown" || k === "s" || k === "S") { keys.down = down; e.preventDefault(); }
+}
+window.addEventListener("keydown", function (e) {
+  if (view === "menu") {
+    if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") { menu.sel = (menu.sel + MODE_LIST.length - 1) % MODE_LIST.length; e.preventDefault(); return; }
+    if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") { menu.sel = (menu.sel + 1) % MODE_LIST.length; e.preventDefault(); return; }
+  }
+  if (e.key === "Escape") { view = "menu"; e.preventDefault(); return; }
+  if (e.key === " " || e.key === "Enter") {
+    e.preventDefault();
+    if (e.repeat) return;
+    if (view !== "play" || !G || G.pass || G.phase === "result") { press(); return; }
+    startHold(G);
+    return;
+  }
+  setKey(e, true);
+});
+window.addEventListener("keyup", function (e) {
+  if (e.key === " " || e.key === "Enter") {
+    e.preventDefault();
+    if (view === "play" && G && !G.pass && (G.phase === "wind" || G.phase === "pitch")) releaseHold(G);
+    return;
+  }
+  setKey(e, false);
+});
+
+CV.addEventListener("pointerdown", function (e) {
+  try { window.focus(); } catch (err) { }
+  if (view === "menu") {
+    var r = CV.getBoundingClientRect();
+    var yy = (e.clientY - r.top) / r.height * H;
+    var idx = Math.floor((yy - 58) / 12);
+    if (idx >= 0 && idx < MODE_LIST.length) menu.sel = idx;
+    press();
+  } else if (view === "over" || !G || G.pass || G.phase === "result") press();
+  else startHold(G);
+  e.preventDefault();
+});
+function upHandler(e) {
+  if (view === "play" && G && !G.pass && (G.phase === "wind" || G.phase === "pitch")) releaseHold(G);
+  if (e) e.preventDefault();
+}
+CV.addEventListener("pointerup", upHandler);
+CV.addEventListener("pointercancel", upHandler);
+
+function holdButton(id, side) {
+  var b = document.getElementById(id);
+  if (!b) return;
+  var set = function (v) { return function (e) { keys[side] = v; b.classList.toggle("hot", v); e.preventDefault(); }; };
+  b.addEventListener("pointerdown", set(true));
+  b.addEventListener("pointerup", set(false));
+  b.addEventListener("pointerleave", set(false));
+  b.addEventListener("pointercancel", set(false));
+}
+holdButton("kL", "left"); holdButton("kR", "right");
+holdButton("kU", "up"); holdButton("kD", "down");
+var swingBtn = document.getElementById("kA");
+swingBtn.addEventListener("pointerdown", function (e) {
+  swingBtn.classList.add("hot");
+  if (view !== "play" || !G || G.pass || G.phase === "result") press();
+  else startHold(G);
+  e.preventDefault();
+});
+swingBtn.addEventListener("pointerup", function (e) { swingBtn.classList.remove("hot"); upHandler(e); });
+swingBtn.addEventListener("pointerleave", function (e) { swingBtn.classList.remove("hot"); upHandler(e); });
+document.getElementById("kM").addEventListener("click", function () { document.body.classList.toggle("flat"); });
+
+function fit() {
+  var sw = Math.max(1, window.innerWidth - 40), sh = Math.max(1, window.innerHeight - 118);
+  var s = Math.max(1, Math.min(Math.floor(sw / W), Math.floor(sh / H)));
+  CV.style.width = (W * s) + "px";
+  CV.style.height = (H * s) + "px";
+}
+window.addEventListener("resize", fit);
+
+fit();
+Promise.resolve(loadBest()).catch(function () { }).then(function () { requestAnimationFrame(frame); });
+</script>
+</body>
+</html>
