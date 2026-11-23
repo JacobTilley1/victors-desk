@@ -5,7 +5,7 @@ import { Gamepad2, ArrowRight, Trophy } from 'lucide-react';
 export const metadata = {
   title: 'Games',
   description:
-    'Play college basketball and football games from The Victors’ Desk — including Hardwood Dynasty, a full college basketball coaching simulator.',
+    'Play free college basketball and football games from The Victors’ Desk — coaching simulators, a retro field goal arcade game and a daily Michigan player puzzle.',
   alternates: { canonical: '/games' },
   openGraph: {
     title: 'Games · The Victors’ Desk',
@@ -39,6 +39,14 @@ const GAMES = [
     blurb:
       'Start with a concession stand at little league and finish owning the Olympics. Twelve sports, seventy upgrades, fifty achievements and a rebirth system that makes every run faster than the last.',
     tag: 'Idle',
+  },
+  {
+    slug: 'split-the-uprights',
+    name: 'Split the Uprights',
+    kicker: 'Retro field goal arcade',
+    blurb:
+      'Three presses: aim, stop the power, catch the notch. Real wind, rain and snow, and three modes including an endless gauntlet that pushes you back three yards every time you make one.',
+    tag: 'Arcade',
   },
   {
     slug: 'gridiron-dynasty',

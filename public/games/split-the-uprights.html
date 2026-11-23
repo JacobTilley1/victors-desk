@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>SPLIT THE UPRIGHTS</title>
+<style>
+/* ============================================================
+   SPLIT THE UPRIGHTS — a 320x180 pixel field-goal arcade game.
+   Everything is drawn on one low-resolution canvas and scaled
+   up by an integer factor, so every pixel stays square.
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#07070f}
+body{
+  display:flex;align-items:center;justify-content:center;
+  font-family:ui-monospace,"Cascadia Mono","Segoe UI Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;
+  color:#cfd8ef;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+  user-select:none;-webkit-user-select:none;
+}
+#wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px}
+
+#cab{
+  position:relative;
+  padding:10px;
+  background:linear-gradient(#1a1d2e,#0e1020);
+  border:2px solid #343a57;
+  box-shadow:0 0 0 2px #07070f, 0 16px 40px rgba(0,0,0,.6);
+}
+#cab::before{
+  content:"";position:absolute;inset:4px;border:1px solid #2a3049;pointer-events:none;
+}
+canvas{
+  display:block;
+  image-rendering:pixelated;image-rendering:crisp-edges;
+  background:#0b1020;
+  cursor:pointer;
+}
+#scan{
+  position:absolute;inset:10px;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,
+    rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.17) 3px, rgba(0,0,0,.17) 4px);
+  mix-blend-mode:multiply;
+}
+body.flat #scan{display:none}
+
+/* ---- touch / accessibility controls ---- */
+#pad{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
+.key{
+  font:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  background:#1b2038;color:#cfd8ef;border:2px solid #3c4466;
+  padding:7px 12px;cursor:pointer;min-width:44px;
+}
+.key:active,.key.hot{background:#2b3560;border-color:#ffd447;color:#ffd447}
+.key.wide{min-width:150px}
+#hint{font-size:10.5px;letter-spacing:.1em;color:#6b769b;text-align:center;line-height:1.7}
+#hint b{color:#9fadd4;font-weight:400}
+@media (max-width:560px){ #hint{display:none} }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="cab">
+    <canvas id="c" width="320" height="180"></canvas>
+    <div id="scan"></div>
+  </div>
+  <div id="pad">
+    <button class="key" id="kL" aria-label="Aim left">&#9664;</button>
+    <button class="key wide" id="kA">Kick</button>
+    <button class="key" id="kR" aria-label="Aim right">&#9654;</button>
+    <button class="key" id="kM" title="Toggle the CRT filter">CRT</button>
+  </div>
+  <div id="hint">
+    <b>&#9664; &#9654;</b> or <b>A / D</b> aim &nbsp;&middot;&nbsp;
+    <b>SPACE</b> or <b>CLICK</b> to start the meter, stop the power, then catch the notch
+  </div>
+</div>
+<script>
+/* ============================================================
+   SPLIT THE UPRIGHTS — pixel toolkit
+   A hand-drawn 5x7 bitmap font and sprite blitter, so every
+   glyph and every limb is placed pixel by pixel.
+   ============================================================ */
+"use strict";
+
+var W = 320, H = 180;
+var CV = document.getElementById("c");
+var X = CV.getContext("2d", { alpha: false });
+X.imageSmoothingEnabled = false;
+
+/* ---------------- palette ---------------- */
+var P = {
+  sky1: "#2b4a8c", sky2: "#4a76bd", sky3: "#7aa5dd",
+  dusk1: "#2a1f4e", dusk2: "#6b3a62", dusk3: "#c46a52",
+  night1: "#070b1e", night2: "#101a3c", night3: "#1b2a55",
+  grass1: "#2f6b35", grass2: "#276029", grass3: "#3b7d41",
+  chalk: "#eef3e2", dirt: "#6a5436",
+  post: "#ffd447", postDark: "#c79a14",
+  stand: "#2a2f47", standLip: "#3d4466",
+  ink: "#0a0c16", white: "#f2f6ff", dim: "#8d9ac2",
+  red: "#e0483c", blue: "#3f6fd8", gold: "#ffd447",
+  green: "#5ad46a", orange: "#ff9a3c", ball: "#8b4a22", ballLace: "#f2f6ff"
+};
+
+/* ---------------- 5x7 bitmap font ----------------
+   Seven rows of five columns per glyph. Authored by hand so the
+   letterforms stay readable at one device pixel per cell.      */
+var FONT = {
+  "A": " ### /#   #/#   #/#####/#   #/#   #/#   #",
+  "B": "#### /#   #/#   #/#### /#   #/#   #/#### ",
+  "C": " ### /#   #/#    /#    /#    /#   #/ ### ",
+  "D": "#### /#   #/#   #/#   #/#   #/#   #/#### ",
+  "E": "#####/#    /#    /#### /#    /#    /#####",
+  "F": "#####/#    /#    /#### /#    /#    /#    ",
+  "G": " ### /#   #/#    /#  ##/#   #/#   #/ ####",
+  "H": "#   #/#   #/#   #/#####/#   #/#   #/#   #",
+  "I": "#####/  #  /  #  /  #  /  #  /  #  /#####",
+  "J": "    #/    #/    #/    #/    #/#   #/ ### ",
+  "K": "#   #/#  # /# #  /##   /# #  /#  # /#   #",
+  "L": "#    /#    /#    /#    /#    /#    /#####",
+  "M": "#   #/## ##/# # #/#   #/#   #/#   #/#   #",
+  "N": "#   #/##  #/# # #/#  ##/#   #/#   #/#   #",
+  "O": " ### /#   #/#   #/#   #/#   #/#   #/ ### ",
+  "P": "#### /#   #/#   #/#### /#    /#    /#    ",
+  "Q": " ### /#   #/#   #/#   #/# # #/#  # / ## #",
+  "R": "#### /#   #/#   #/#### /# #  /#  # /#   #",
+  "S": " ####/#    /#    / ### /    #/    #/#### ",
+  "T": "#####/  #  /  #  /  #  /  #  /  #  /  #  ",
+  "U": "#   #/#   #/#   #/#   #/#   #/#   #/ ### ",
+  "V": "#   #/#   #/#   #/#   #/#   #/ # # /  #  ",
+  "W": "#   #/#   #/#   #/#   #/# # #/## ##/#   #",
+  "X": "#   #/#   #/ # # /  #  / # # /#   #/#   #",
+  "Y": "#   #/#   #/ # # /  #  /  #  /  #  /  #  ",
+  "Z": "#####/    #/   # /  #  / #   /#    /#####",
+  "0": " ### /#   #/#  ##/# # #/##  #/#   #/ ### ",
+  "1": "  #  / ##  /  #  /  #  /  #  /  #  / ### ",
+  "2": " ### /#   #/    #/   # /  #  / #   /#####",
+  "3": "#####/   # /  #  /   # /    #/#   #/ ### ",
+  "4": "   # /  ## / # # /#  # /#####/   # /   # ",
+  "5": "#####/#    /#### /    #/    #/#   #/ ### ",
+  "6": "  ## / #   /#    /#### /#   #/#   #/ ### ",
+  "7": "#####/    #/   # /  #  / #   / #   / #   ",
+  "8": " ### /#   #/#   #/ ### /#   #/#   #/ ### ",
+  "9": " ### /#   #/#   #/ ####/    #/   # / ##  ",
+  " ": "     /     /     /     /     /     /     ",
+  ".": "     /     /     /     /     / ##  / ##  ",
+  ",": "     /     /     /     / ##  / ##  / #   ",
+  "!": "  #  /  #  /  #  /  #  /  #  /     /  #  ",
+  "?": " ### /#   #/    #/   # /  #  /     /  #  ",
+  "'": "  #  /  #  /     /     /     /     /     ",
+  "-": "     /     /     /#####/     /     /     ",
+  "+": "     /  #  /  #  /#####/  #  /  #  /     ",
+  ":": "     / ##  / ##  /     / ##  / ##  /     ",
+  "/": "    #/    #/   # /  #  / #   /#    /#    ",
+  "(": "   # /  #  / #   / #   / #   /  #  /   # ",
+  ")": " #   /  #  /   # /   # /   # /  #  / #   ",
+  "%": "#   #/#  # /  #  /  #  /  #  / #  #/#   #",
+  "&": " ##  /#  # /#  # / ##  /#  ##/#  # / ## #",
+  "=": "     /     /#####/     /#####/     /     ",
+  "*": "     /#   #/ # # /#####/ # # /#   #/     ",
+  "#": " # # /#####/ # # / # # /#####/ # # /     ",
+  "°": " ##  /#  # / ##  /     /     /     /     ",
+  "×": "     /#   #/ # # /  #  / # # /#   #/     ",
+  "↑": "  #  / ### /# # #/  #  /  #  /  #  /  #  ",
+  "↓": "  #  /  #  /  #  /# # #/ ### /  #  /     ",
+  "←": "     /  #  / #   /#####/ #   /  #  /     ",
+  "→": "     /  #  /   # /#####/   # /  #  /     ",
+  "▲": "     /  #  / ### /#####/     /     /     ",
+  "▼": "     /     /#####/ ### /  #  /     /     ",
+  "♥": "     / # # /#####/#####/ ### /  #  /     "
+};
+var GLYPH = {};
+(function compileFont() {
+  var ch;
+  for (ch in FONT) {
+    if (!Object.prototype.hasOwnProperty.call(FONT, ch)) continue;
+    GLYPH[ch] = FONT[ch].split("/").map(function (row) {
+      var bits = [];
+      for (var i = 0; i < 5; i++) bits.push(row.charAt(i) === "#");
+      return bits;
+    });
+  }
+})();
+
+function px(x, y, w, h, c) { X.fillStyle = c; X.fillRect(x | 0, y | 0, w | 0, h | 0); }
+function pxc(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
+
+/* Draw a string. s = pixel size, tracking = gap between glyphs. */
+function textAt(str, x, y, color, s, tracking, ctx) {
+  s = s || 1; tracking = tracking == null ? 1 : tracking;
+  var c = ctx || X;
+  var cx = x | 0, i, r, col;
+  str = String(str).toUpperCase();
+  c.fillStyle = color;
+  for (i = 0; i < str.length; i++) {
+    var g = GLYPH[str.charAt(i)];
+    if (!g) { cx += (5 + tracking) * s; continue; }
+    for (r = 0; r < 7; r++) for (col = 0; col < 5; col++) {
+      if (g[r][col]) c.fillRect(cx + col * s, (y | 0) + r * s, s, s);
+    }
+    cx += (5 + tracking) * s;
+  }
+  return cx - tracking * s;
+}
+function textWidth(str, s, tracking) {
+  s = s || 1; tracking = tracking == null ? 1 : tracking;
+  return String(str).length * (5 + tracking) * s - tracking * s;
+}
+function textCenter(str, cx, y, color, s, tracking, ctx) {
+  return textAt(str, Math.round(cx - textWidth(str, s, tracking) / 2), y, color, s, tracking, ctx);
+}
+/* Chunky drop-shadowed headline. */
+function textShadow(str, x, y, color, shadow, s, tracking) {
+  textAt(str, x + s, y + s, shadow, s, tracking);
+  textAt(str, x, y, color, s, tracking);
+}
+function textCenterShadow(str, cx, y, color, shadow, s, tracking) {
+  var x = Math.round(cx - textWidth(str, s, tracking) / 2);
+  textShadow(str, x, y, color, shadow, s, tracking);
+}
+
+/* ---------------- sprite blitter ----------------
+   Rows of characters; each character is a palette key.
+   "." is transparent.                                */
+function drawSprite(rows, x, y, pal, flip, scale, ctx) {
+  var c = ctx || X;
+  scale = scale || 1;
+  var h = rows.length, w = rows[0].length, r, i;
+  for (r = 0; r < h; r++) {
+    var row = rows[r];
+    for (i = 0; i < w; i++) {
+      var k = row.charAt(flip ? w - 1 - i : i);
+      var col = pal[k];
+      if (!col) continue;
+      c.fillStyle = col;
+      c.fillRect((x | 0) + i * scale, (y | 0) + r * scale, scale, scale);
+    }
+  }
+}
+
+/* ---------------- kicker, holder, ball sprites ----------------
+   Seen from behind, so the kicker shows his back and number.    */
+var TEAM = {
+  jersey: "#d83b30", jerseyDark: "#9c2820", pants: "#e8ecf7", pantsDark: "#b9c1d6",
+  helmet: "#2b3f7a", helmetHi: "#4f73c4", skin: "#c58b5c", sock: "#1b2140", shoe: "#161a2c",
+  num: "#f2f6ff"
+};
+function kickerPal() {
+  return {
+    ".": null, h: TEAM.helmet, i: TEAM.helmetHi, s: TEAM.skin,
+    j: TEAM.jersey, k: TEAM.jerseyDark, n: TEAM.num,
+    p: TEAM.pants, q: TEAM.pantsDark, o: TEAM.sock, b: TEAM.shoe
+  };
+}
+
+/* 11 x 18, five frames of the approach and strike */
+var KICKER = [
+  /* 0 — set, hands on hips */
+  [".. hhhhh ..", ". hiiiih ..", ". hhhhhh ..", "... sss ...", ".jjjjjjjjj.",
+   "jjjjjjjjjjj", "jjjjnnnjjjj", "jjjjnnnjjjj", ".jjjjjjjjj.", "..jjjjjjj..",
+   "...ppppp...", "...pp.pp...", "...pp.pp...", "...qp.pq...", "...oo.oo...",
+   "...oo.oo...", "..bbb.bbb..", "..........."],
+  /* 1 — first step */
+  ["..hhhhh....", ".hiiiih....", ".hhhhhh....", "...sss.....", ".jjjjjjjj..",
+   "jjjjjjjjjj.", "jjjjnnnjjj.", "jjjjnnnjjj.", ".jjjjjjjj..", "..jjjjjj...",
+   "...pppp....", "...pp.pp...", "..pp...pp..", "..qp...pq..", "..oo....oo.",
+   "..oo....oo.", ".bbb....bbb", "..........."],
+  /* 2 — plant, leg loaded back */
+  ["..hhhhh....", ".hiiiih....", ".hhhhhh....", "...sss.....", ".jjjjjjjj..",
+   "jjjjjjjjjj.", "jjjjnnnjjj.", "jjjjnnnjjj.", ".jjjjjjjjj.", "..jjjjjjqq.",
+   "...pppp.qq.", "...pp..qq..", "..pp...qq..", "..qp..qq...", "..oo.oo....",
+   "..oo.oo....", ".bbb.bb....", "..........."],
+  /* 3 — strike, leg through the ball */
+  ["...hhhhh...", "..hiiiih...", "..hhhhhh...", "....sss....", "..jjjjjjjj.",
+   ".jjjjjjjjjj", ".jjjjnnnjjj", ".jjjjnnnjjj", "..jjjjjjjj.", "...jjjjjj..",
+   "...pppp....", "..pp..qqqq.", "..pp....qqq", "..qp......q", "..oo.......",
+   "..oo.......", ".bbb.......", "..........."],
+  /* 4 — follow-through, leg high */
+  ["...hhhhh...", "..hiiiih...", "..hhhhhh...", "....sss....", "..jjjjjjjj.",
+   ".jjjjjjjjjj", ".jjjjnnnjjj", ".jjjjnnnjjj", "..jjjjjjjj.", "...jjjjjqq.",
+   "...pppp.qq.", "..pp...qq..", "..pp..qq...", "..qp.qq....", "..oo.......",
+   "..oo.......", ".bbb.......", "..........."]
+];
+
+/* 12 x 10 — the holder, kneeling, seen from behind */
+var HOLDER = [
+  "....hhhh....", "...hiiiih...", "...hhhhhh...", ".....ss.....", "..jjjjjjjj..",
+  ".jjjjjjjjjj.", ".jjjjjjjjjj.", "..pppppppp..", "..pp....pp..", ".bbb....bbb."
+];
+
+/* The football, drawn at three sizes as it recedes */
+var BALL_BIG = ["..###..", ".#####.", "##nnn##", "#nnnnn#", "##nnn##", ".#####.", "..###.."];
+var BALL_MID = [".###.", "#nnn#", "#nnn#", "#nnn#", ".###."];
+function ballPal() { return { ".": null, "#": P.ball, n: "#a85c2c" }; }
+
+/* A seeded value stream, so crowd layouts and gusts stay stable
+   within a kick instead of boiling between frames. */
+function hash32(n) {
+  n = (n ^ 61) ^ (n >>> 16); n = (n + (n << 3)) >>> 0;
+  n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d) >>> 0;
+  return (n ^ (n >>> 15)) >>> 0;
+}
+function rnd(seed) { return hash32(seed >>> 0) / 4294967296; }
+/* ============================================================
+   SPLIT THE UPRIGHTS — rules, physics, modes
+   Units are yards and seconds throughout.
+   ============================================================ */
+
+var GRAV = 10.72;          /* yd/s^2 */
+/* 37 degrees. Any steeper and the apex of a mid-range kick climbs
+   out of the top of the frame behind the status bar. */
+var LOFT = 37 * Math.PI / 180;
+var SIN_L = Math.sin(LOFT), COS_L = Math.cos(LOFT);
+var CROSSBAR = 3.333;      /* 10 ft */
+var POST_HALF = 3.083;     /* 18'6" between the uprights */
+var POST_TOP = 15.0;       /* uprights rise to about 45 ft */
+var AIM_MAX = 6;           /* degrees either side */
+var WIND_ACC = 0.085;      /* yd/s^2 per mph */
+/* Sideways speed at full error. Tuned so that at 40 yards the ball
+   stays inside the uprights to about 0.17 off the notch, which is the
+   width of the amber zone drawn on the meter, and drifts further as
+   the kick gets longer and hangs up for longer. */
+var ERR_LAT = 6.0;
+
+/* Minimum power that clears the bar at a given distance, derived from
+   the same projectile model the ball actually flies. */
+function speedForRange(r) { return Math.sqrt(r * GRAV / Math.sin(2 * LOFT)); }
+function powerForSpeed(v) { return (v - 12) / 16; }
+function speedForPower(p) { return 12 + p * 16; }
+function minPower(dist) {
+  var rNeeded = dist / (1 - CROSSBAR / (dist * Math.tan(LOFT)));
+  if (rNeeded <= 0 || !isFinite(rNeeded)) return 1.2;
+  return powerForSpeed(speedForRange(rNeeded));
+}
+
+/* ---------------- persistence ---------------- */
+var SKEY = "best";
+var GAME = "split-the-uprights";
+var SAVE_API = "/api/games/saves";
+
+/* Local first, then the account when one is signed in. The site's save
+   route answers 401 for a signed-out visitor, which is not an error
+   here: the high scores simply stay on this device. */
+var store = (function () {
+  var LS = "stu:local:";
+  function lsGet(k) { try { return window.localStorage.getItem(LS + k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { window.localStorage.setItem(LS + k, v); return true; } catch (e) { return false; } }
+  return {
+    account: null,
+    get: function (k) {
+      var local = lsGet(k);
+      if (typeof fetch !== "function") return Promise.resolve(local);
+      return fetch(SAVE_API + "?game=" + GAME + "&key=" + encodeURIComponent(k), { credentials: "same-origin" })
+        .then(function (r) {
+          if (r.status === 401) { store.account = false; return null; }
+          if (!r.ok) return null;
+          store.account = true;
+          return r.json();
+        })
+        .then(function (j) {
+          var remote = j && j.value != null ? j.value : null;
+          if (remote) { lsSet(k, remote); return remote; }
+          return local;
+        })
+        .catch(function () { return local; });
+    },
+    set: function (k, v) {
+      lsSet(k, v);
+      if (typeof fetch !== "function") return Promise.resolve(true);
+      return fetch(SAVE_API, {
+        method: "PUT", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ game: GAME, key: k, value: v })
+      }).then(function (r) {
+        if (r.status === 401) { store.account = false; return true; }
+        store.account = r.ok;
+        return true;
+      }).catch(function () { return true; });
+    }
+  };
+})();
+
+var BEST = {
+  gauntlet: { dist: 0, streak: 0, score: 0 },
+  lives: { score: 0, makes: 0, longest: 0 },
+  rush: { score: 0, makes: 0, longest: 0 }
+};
+function saveBest() { try { store.set(SKEY, JSON.stringify(BEST)); } catch (e) { } }
+function loadBest() {
+  return Promise.resolve(store.get(SKEY)).then(function (raw) {
+    if (!raw) return false;
+    try {
+      var o = JSON.parse(raw), m;
+      for (m in BEST) if (o[m]) {
+        var k;
+        for (k in BEST[m]) if (typeof o[m][k] === "number") BEST[m][k] = o[m][k];
+      }
+      return true;
+    } catch (e) { return false; }
+  }).catch(function () { return false; });
+}
+
+/* ---------------- modes ---------------- */
+var MODES = {
+  gauntlet: {
+    id: "gauntlet", name: "GAUNTLET",
+    blurb: "START AT 20. EVERY MAKE PUSHES YOU BACK.\nONE MISS AND THE RUN IS OVER.",
+    start: function (G) { G.dist = 20; G.lives = 1; },
+    nextDist: function (G) { return Math.min(65, G.dist + 3); },
+    onMake: function (G) { G.dist = MODES.gauntlet.nextDist(G); },
+    onMiss: function (G) { G.lives = 0; }
+  },
+  lives: {
+    id: "lives", name: "THREE LIVES",
+    blurb: "THREE MISSES AND YOU'RE DONE.\nLONGER KICKS ARE WORTH MORE.",
+    start: function (G) { G.lives = 3; G.dist = 22; },
+    onMake: function (G) { G.dist = pickDist(G, 20, 58); },
+    onMiss: function (G) { G.lives--; G.dist = pickDist(G, 20, 58); }
+  },
+  rush: {
+    id: "rush", name: "60 SECOND RUSH",
+    blurb: "KICK AS MANY AS YOU CAN.\nMAKE +2 SECONDS, MISS -3.",
+    start: function (G) { G.lives = 1; G.clock = 60; G.dist = 20; },
+    onMake: function (G) { G.clock = Math.min(75, G.clock + 2); G.dist = pickDist(G, 18, 50); },
+    onMiss: function (G) { G.clock -= 3; G.dist = pickDist(G, 18, 50); }
+  }
+};
+function pickDist(G, lo, hi) {
+  /* Creep the floor upward as the run goes on, so it keeps getting harder. */
+  var ramp = Math.min(1, G.kicks / 14);
+  var a = Math.round(lo + (hi - lo) * 0.45 * ramp);
+  var b = Math.round(lo + (hi - lo) * (0.55 + 0.45 * ramp));
+  return a + Math.floor(rnd(G.seed + G.kicks * 977) * (b - a + 1));
+}
+
+/* ---------------- conditions ---------------- */
+var SKIES = ["day", "dusk", "night"];
+function rollConditions(G) {
+  var k = G.kicks, s = G.seed + k * 31337;
+  var sky, wetChance;
+  if (G.mode === "gauntlet") {
+    sky = k < 4 ? "day" : k < 8 ? "dusk" : "night";
+    wetChance = Math.min(0.55, Math.max(0, (k - 3) * 0.08));
+  } else {
+    sky = SKIES[Math.floor(rnd(s + 5) * 3)];
+    wetChance = 0.3;
+  }
+  var w = rnd(s + 7);
+  var precip = w < wetChance ? (rnd(s + 9) < 0.5 ? "rain" : "snow") : "none";
+  var windCap = G.mode === "gauntlet" ? Math.min(18, 3 + k * 1.6) : 4 + rnd(s + 13) * 14;
+  var windX = (rnd(s + 17) * 2 - 1) * windCap;
+  var windZ = (rnd(s + 19) * 2 - 1) * windCap * 0.5;
+  G.sky = sky; G.precip = precip;
+  G.windX = Math.round(windX * 10) / 10;
+  G.windZ = Math.round(windZ * 10) / 10;
+  G.gust = 0;
+}
+
+/* ---------------- game state ---------------- */
+function newGame(mode) {
+  var G = {
+    mode: mode, phase: "aim", kicks: 0, makes: 0, score: 0, streak: 0, bestStreak: 0,
+    longest: 0, lives: 1, clock: 0, dist: 20, aim: 0, seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0,
+    power: 0, powerDir: 1, acc: 1, accDir: -1, lockedPower: 0, err: 0,
+    ball: null, result: null, resultT: 0, anim: 0, kickT: 0,
+    sky: "day", precip: "none", windX: 0, windZ: 0, gust: 0,
+    shake: 0, flash: 0, slow: 1, newBest: false, banner: null, trail: [], parts: []
+  };
+  MODES[mode].start(G);
+  rollConditions(G);
+  return G;
+}
+
+/* ---------------- the kick ---------------- */
+function launch(G) {
+  var p = G.lockedPower;
+  var v = speedForPower(p);
+  /* windZ is negative for a headwind, so it subtracts carry. */
+  v *= 1 + G.windZ * 0.005;
+  var aimRad = G.aim * Math.PI / 180;
+  var vz = v * COS_L * Math.cos(aimRad);
+  var vy = v * SIN_L;
+  var vx = v * COS_L * Math.sin(aimRad) + G.err * ERR_LAT;
+  G.ball = {
+    x: 0, y: 0.12, z: 0,
+    vx: vx, vy: vy, vz: vz,
+    spin: G.err * 1.4,          /* the ball keeps curving the way it was struck */
+    live: true, t: 0, crossed: false, hit: null
+  };
+  G.trail = [];
+  G.phase = "kick";
+  G.kickT = 0;
+}
+
+function stepBall(G, dt) {
+  var b = G.ball;
+  if (!b || !b.live) return;
+  var ax = G.windX * WIND_ACC + b.spin;
+  b.vx += ax * dt;
+  b.vy -= GRAV * dt;
+  b.x += b.vx * dt;
+  b.y += b.vy * dt;
+  b.z += b.vz * dt;
+  b.t += dt;
+
+  if (!b.crossed && b.z >= G.dist) {
+    b.crossed = true;
+    /* Step back to the exact plane of the posts for a fair verdict. */
+    var over = (b.z - G.dist) / Math.max(b.vz * dt, 1e-6);
+    var px2 = b.x - b.vx * dt * over;
+    var py2 = b.y - b.vy * dt * over;
+    judge(G, px2, py2);
+  }
+  if (b.y <= 0) {
+    b.y = 0;
+    b.live = false;
+    if (!b.crossed) judge(G, b.x, -1);     /* came down short of the posts */
+  }
+  if (b.t > 9) b.live = false;
+}
+
+/* Decide the kick at the plane of the uprights. */
+function judge(G, x, y) {
+  var r = { good: false, kind: "", x: x, y: y };
+  if (y < 0) { r.kind = "short"; }
+  else if (y < CROSSBAR - 0.13) { r.kind = "short"; }
+  else if (Math.abs(y - CROSSBAR) <= 0.13 && Math.abs(x) <= POST_HALF + 0.12) {
+    /* Off the crossbar. Whether it tumbles over is decided by how much
+       of the ball was above the bar, not by a coin flip. */
+    r.kind = "crossbar";
+    r.good = y > CROSSBAR + 0.02;
+    if (G.ball) { G.ball.vy = Math.abs(G.ball.vy) * 0.28; G.ball.vz *= r.good ? 0.45 : -0.35; G.ball.spin = 0; }
+  } else if (Math.abs(Math.abs(x) - POST_HALF) <= 0.09 && y > CROSSBAR) {
+    r.kind = "upright";
+    r.good = Math.abs(x) < POST_HALF;
+    if (G.ball) { G.ball.vx = (x < 0 ? -1 : 1) * (r.good ? -2 : 3); G.ball.vz *= 0.5; G.ball.spin = 0; }
+  } else if (Math.abs(x) <= POST_HALF && y > CROSSBAR && y < POST_TOP + 6) {
+    r.kind = "good"; r.good = true;
+  } else if (y >= POST_TOP + 6) {
+    r.kind = Math.abs(x) <= POST_HALF ? "good" : (x < 0 ? "left" : "right");
+    r.good = r.kind === "good";
+  } else {
+    r.kind = x < 0 ? "left" : "right";
+  }
+  G.pending = r;
+}
+
+var RESULT_TEXT = {
+  good: "IT'S GOOD!", left: "NO GOOD - WIDE LEFT", right: "NO GOOD - WIDE RIGHT",
+  short: "NO GOOD - SHORT", blocked: "BLOCKED!",
+  crossbarIn: "OFF THE CROSSBAR - GOOD!", crossbarOut: "OFF THE CROSSBAR - NO GOOD",
+  uprightIn: "OFF THE UPRIGHT - GOOD!", uprightOut: "DOINK! NO GOOD"
+};
+
+/* Turn the verdict into score, streaks and mode bookkeeping. */
+function settle(G) {
+  var r = G.pending || { good: false, kind: "short" };
+  var perfect = Math.abs(G.err) < 0.045 && G.lockedPower >= G.reqPower && G.lockedPower <= G.reqPower + 0.11;
+  var key = r.kind === "crossbar" ? (r.good ? "crossbarIn" : "crossbarOut")
+    : r.kind === "upright" ? (r.good ? "uprightIn" : "uprightOut") : r.kind;
+  var pts = 0, notes = [];
+
+  G.kicks++;
+  if (r.good) {
+    G.makes++;
+    G.streak++;
+    if (G.streak > G.bestStreak) G.bestStreak = G.streak;
+    if (G.dist > G.longest) G.longest = G.dist;
+    pts = Math.round(G.dist * 10);
+    if (perfect) { pts *= 2; notes.push("PERFECT STRIKE  x2"); }
+    if (r.kind === "crossbar" || r.kind === "upright") { pts += 500; notes.push("OFF THE IRON  +500"); }
+    if (G.streak > 1) { var sb = (G.streak - 1) * 50; pts += sb; notes.push("STREAK " + G.streak + "  +" + sb); }
+    if (G.dist >= 55) { pts += 400; notes.push("FROM DOWNTOWN  +400"); }
+    G.score += pts;
+    MODES[G.mode].onMake(G);
+  } else {
+    G.streak = 0;
+    MODES[G.mode].onMiss(G);
+  }
+  G.result = { good: r.good, kind: r.kind, text: RESULT_TEXT[key] || "NO GOOD", pts: pts, notes: notes, perfect: perfect };
+  G.resultT = 0;
+  G.phase = "result";
+  return G.result;
+}
+
+function runOver(G) {
+  if (G.mode === "rush") return G.clock <= 0;
+  return G.lives <= 0;
+}
+
+function recordBest(G) {
+  var b = BEST[G.mode], improved = false;
+  if (G.mode === "gauntlet") {
+    if (G.longest > b.dist) { b.dist = G.longest; improved = true; }
+    if (G.bestStreak > b.streak) { b.streak = G.bestStreak; improved = true; }
+    if (G.score > b.score) { b.score = G.score; improved = true; }
+  } else {
+    if (G.score > b.score) { b.score = G.score; improved = true; }
+    if (G.makes > b.makes) { b.makes = G.makes; improved = true; }
+    if (G.longest > b.longest) { b.longest = G.longest; improved = true; }
+  }
+  if (improved) saveBest();
+  return improved;
+}
+
+/* Set up the next attempt without disturbing the score. */
+function nextKick(G) {
+  rollConditions(G);
+  G.aim = 0;
+  G.power = 0; G.acc = 1; G.lockedPower = 0; G.err = 0;
+  G.ball = null; G.pending = null; G.result = null;
+  G.trail = [];
+  G.reqPower = minPower(G.dist);
+  G.phase = "aim";
+  G.anim = 0;
+}
+/* ============================================================
+   SPLIT THE UPRIGHTS — camera, stadium, loop, input
+   ============================================================ */
+
+/* ---------------- camera ---------------- */
+var FOCAL = 150, HORIZON = 62, CAMY = 1.6, CAMZ = -5.5;
+function proj(x, y, z) {
+  var d = z - CAMZ;
+  if (d < 0.35) d = 0.35;
+  var s = FOCAL / d;
+  return { x: 160 + x * s, y: HORIZON - (y - CAMY) * s, s: s };
+}
+
+/* ---------------- pre-rendered stadium ---------------- */
+var bgCv = document.createElement("canvas");
+bgCv.width = W; bgCv.height = H;
+var bgX = bgCv.getContext("2d");
+bgX.imageSmoothingEnabled = false;
+
+var SKYSET = {
+  day: { a: "#3f74c8", b: "#6d9cdd", c: "#9cc2ee", sun: "#fff3c4", haze: "#c9ddf5" },
+  dusk: { a: "#2a1f4e", b: "#7b3f6a", c: "#d9794f", sun: "#ffd08a", haze: "#e9a06d" },
+  night: { a: "#05081a", b: "#0b1430", c: "#162448", sun: "#dfe7fa", haze: "#1d2d58" }
+};
+
+function renderStadium(G) {
+  var S = SKYSET[G.sky], night = G.sky === "night", i, j;
+  bgX.clearRect(0, 0, W, H);
+
+  /* sky, banded rather than smoothly blended */
+  pxc(bgX, 0, 0, W, 12, S.a);
+  pxc(bgX, 0, 12, W, 8, S.a);
+  pxc(bgX, 0, 20, W, 6, S.b);
+  pxc(bgX, 0, 26, W, 5, S.b);
+  pxc(bgX, 0, 31, W, 5, S.c);
+  pxc(bgX, 0, 36, W, 4, S.haze);
+
+  if (night) {
+    for (i = 0; i < 70; i++) {
+      var sx = Math.floor(rnd(i * 7 + 1) * W), sy = Math.floor(rnd(i * 13 + 5) * 36);
+      pxc(bgX, sx, sy, 1, 1, i % 5 ? "#5c6a9c" : "#e8eeff");
+    }
+  } else if (G.sky === "dusk") {
+    pxc(bgX, 232, 22, 10, 10, S.sun);
+    pxc(bgX, 230, 24, 14, 6, S.sun);
+  } else {
+    pxc(bgX, 244, 14, 12, 12, S.sun);
+    pxc(bgX, 242, 16, 16, 8, S.sun);
+  }
+
+  /* upper deck */
+  pxc(bgX, 0, 40, W, 3, night ? "#121832" : "#232942");
+  crowdBand(bgX, 40 + 3, 9, night ? 0.5 : 1);
+  pxc(bgX, 0, 52, W, 2, night ? "#1b2240" : "#39415f");
+  /* lower bowl, slightly brighter and denser */
+  crowdBand(bgX, 54, 7, night ? 0.6 : 1);
+  pxc(bgX, 0, 61, W, 2, night ? "#0f1630" : "#2b3147");
+
+  /* field-level wall and ad boards: the dark band the uprights sit against */
+  pxc(bgX, 0, 55, W, 8, night ? "#0b1024" : "#171d33");
+  pxc(bgX, 0, 55, W, 1, night ? "#1d2444" : "#39405e");
+  for (var ab = 0; ab < 9; ab++) {
+    pxc(bgX, 6 + ab * 35, 57, 28, 4, night ? "#141a30" : "#20273f");
+    pxc(bgX, 8 + ab * 35, 58, 24, 2, ab % 3 === 0 ? "#3f4a70" : "#2b3350");
+  }
+  lightTower(bgX, 34, night);
+  lightTower(bgX, 272, night);
+  if (!G.hideBoard) scoreboard(bgX, G, night);
+
+  /* ---- field ---- */
+  var g1 = night ? "#18431e" : "#317038";
+  var g2 = night ? "#123112" : "#245526";
+  var chalk = night ? "#c3cdbb" : P.chalk;
+  pxc(bgX, 0, 63, W, H - 63, g1);
+
+  /* mow stripes, drawn in projected five-yard slabs */
+  var far = G.dist + 14, z;
+  for (z = 0; z < far; z += 5) {
+    var pa = proj(0, 0, z), pb = proj(0, 0, Math.min(z + 5, far));
+    if ((Math.floor(z / 5) % 2) === 0) continue;
+    var wA = 27 * pa.s, wB = 27 * pb.s;
+    trap(bgX, pb.y, pa.y, wB, wA, g2);
+  }
+  /* yard lines every five, hash marks every one */
+  /* Near the horizon the five-yard lines crowd into one another and
+     read as a single pale slab, so keep a minimum gap between them
+     and let the far ones fade into the turf. */
+  var lastY = 1e9;
+  for (z = far - (far % 5); z >= 0; z -= 5) {
+    var p = proj(0, 0, z);
+    if (p.y < 63 || p.y > H) continue;
+    if (p.y > lastY - 3.2) continue;
+    lastY = p.y;
+    var hw = 26.65 * p.s;
+    var th = Math.max(1, Math.round(p.s * 0.12));
+    var far_ = p.y < 76;
+    pxc(bgX, Math.round(160 - hw), Math.round(p.y), Math.round(hw * 2), th,
+      far_ ? (night ? "#7f8c78" : "#a9b79c") : chalk);
+  }
+  for (z = 6; z <= far; z += 1) {
+    var ph = proj(0, 0, z);
+    if (ph.y < 64 || ph.y > H - 2) continue;
+    var hm = 3.1 * ph.s, hlen = Math.max(1, Math.round(0.35 * ph.s));
+    if (hlen > 4) continue;             /* any longer and they smear into chevrons */
+    var hc = night ? "#8e9a86" : "#c2cdb4";
+    pxc(bgX, Math.round(160 - hm), Math.round(ph.y), hlen, 1, hc);
+    pxc(bgX, Math.round(160 + hm), Math.round(ph.y), hlen, 1, hc);
+  }
+  /* end zone from the goal line back to the posts */
+  var gl = Math.max(0, G.dist - 10);
+  var pz1 = proj(0, 0, gl), pz2 = proj(0, 0, G.dist);
+  trap(bgX, pz2.y, pz1.y, 26.65 * pz2.s * 2, 26.65 * pz1.s * 2, night ? "#2a1a3c" : "#4a2c6b");
+  var pgl = proj(0, 0, gl);
+  pxc(bgX, Math.round(160 - 26.65 * pgl.s), Math.round(pgl.y), Math.round(26.65 * pgl.s * 2), 2, chalk);
+  var pend = proj(0, 0, G.dist);
+  pxc(bgX, Math.round(160 - 26.65 * pend.s), Math.round(pend.y) - 1, Math.round(26.65 * pend.s * 2), 2, chalk);
+
+  /* a wall behind the end line so the field has a back edge */
+  var pb2 = proj(0, 0, G.dist + 3);
+  pxc(bgX, 0, 63, W, Math.max(0, Math.round(pb2.y) - 63), night ? "#101831" : "#2d3450");
+  pxc(bgX, 0, Math.max(63, Math.round(pb2.y) - 1), W, 1, night ? "#1b2444" : "#464e73");
+}
+
+function trap(ctx, yTop, yBot, wTop, wBot, color) {
+  var y, t0 = Math.round(yTop), t1 = Math.round(yBot);
+  if (t1 <= t0) return;
+  for (y = t0; y < t1; y++) {
+    if (y < 63 || y >= H) continue;
+    var f = (y - t0) / Math.max(1, t1 - t0);
+    var w = wTop + (wBot - wTop) * f;
+    pxc(ctx, Math.round(160 - w), y, Math.round(w * 2), 1, color);
+  }
+}
+
+/* A tight, low-contrast palette. Too many bright hues at one pixel
+   each turn the whole bowl into television static. */
+var CROWD_COLS_DAY = ["#8e4a44", "#b9c1d6", "#3f5c96", "#9a8450", "#6b5a4a", "#7c88ab"];
+var CROWD_COLS_NIGHT = ["#4a2824", "#5e6484", "#24395f", "#5c4e30", "#3a3028", "#434b68"];
+function crowdBand(ctx, y0, h, bright) {
+  var cols = bright >= 1 ? CROWD_COLS_DAY : CROWD_COLS_NIGHT;
+  var n = 0;
+  for (var row = 0; row < h; row++) {
+    if (row % 3 === 2) { pxc(ctx, 0, y0 + row, W, 1, bright >= 1 ? "#2a3048" : "#161b30"); continue; }
+    for (var x = 0; x < W; x += 2) {
+      n++;
+      var r = rnd(n * 2654435761 + row * 97);
+      if (r < 0.2) continue;
+      var c = cols[Math.floor(rnd(n * 40503 + 7) * cols.length)];
+      pxc(ctx, x + (row % 2), y0 + row, 1, 1, c);
+    }
+  }
+}
+
+function lightTower(ctx, x, night) {
+  pxc(ctx, x - 1, 18, 3, 24, night ? "#0d1226" : "#1b2038");
+  pxc(ctx, x - 13, 10, 27, 9, night ? "#141b36" : "#232a46");
+  for (var r = 0; r < 3; r++) for (var i = 0; i < 9; i++) {
+    var on = night || ((i + r) % 2 === 0);
+    pxc(ctx, x - 12 + i * 3, 11 + r * 3, 2, 2, on ? (night ? "#fff6c8" : "#e4ecff") : "#39405e");
+  }
+  if (night) {
+    ctx.globalAlpha = 0.14;
+    pxc(ctx, x - 22, 8, 45, 16, "#fff6c8");
+    ctx.globalAlpha = 0.07;
+    pxc(ctx, x - 34, 6, 69, 40, "#fff6c8");
+    ctx.globalAlpha = 1;
+  }
+}
+
+function scoreboard(ctx, G, night) {
+  /* Kept left of centre: the uprights own the middle of the frame. */
+  var x = 52, y = 18, w = 84, h = 22;
+  pxc(ctx, x - 2, y - 2, w + 4, h + 4, night ? "#070b18" : "#141a2e");
+  pxc(ctx, x, y, w, h, "#05070f");
+  pxc(ctx, x, y, w, 1, "#39405e"); pxc(ctx, x, y + h - 1, w, 1, "#39405e");
+  pxc(ctx, x, y, 1, h, "#39405e"); pxc(ctx, x + w - 1, y, 1, h, "#39405e");
+  textAt("SCORE", x + 4, y + 4, "#6b769b", 1, 1, ctx);
+  textAt(String(G.score), x + 4, y + 12, P.gold, 1, 1, ctx);
+  textAt("MADE", x + 52, y + 4, "#6b769b", 1, 1, ctx);
+  textAt(G.makes + "/" + G.kicks, x + 52, y + 12, "#e8ecf7", 1, 1, ctx);
+  /* support legs */
+  pxc(ctx, x + 10, y + h + 2, 2, 8, night ? "#121832" : "#232942");
+  pxc(ctx, x + w - 12, y + h + 2, 2, 8, night ? "#121832" : "#232942");
+}
+
+/* ---------------- dynamic layers ---------------- */
+function drawPosts(G, alpha) {
+  var d = G.dist;
+  var base = proj(0, 0, d);
+  var bar = proj(0, CROSSBAR, d);
+  var topL = proj(-POST_HALF, POST_TOP, d);
+  var barL = proj(-POST_HALF, CROSSBAR, d);
+  var barR = proj(POST_HALF, CROSSBAR, d);
+  var w = Math.max(2, Math.round(base.s * 0.30));
+  X.globalAlpha = alpha == null ? 1 : alpha;
+  /* Every piece gets a dark border first; without it the yellow
+     vanishes into a stand full of yellow shirts. */
+  function bar3(x, y, ww, hh, col) {
+    pxc(X, Math.round(x) - 1, Math.round(y) - 1, Math.round(ww) + 2, Math.round(hh) + 2, "#1a1405");
+    pxc(X, Math.round(x), Math.round(y), Math.round(ww), Math.round(hh), col);
+  }
+  var upH = Math.round(bar.y - topL.y) + 1;
+  bar3(160 - w / 2, bar.y, w, base.y - bar.y + 1, P.postDark);
+  bar3(barL.x - w / 2, bar.y - w, (barR.x - barL.x) + w, w + 1, P.post);
+  bar3(barL.x - w / 2, topL.y, w, upH, P.post);
+  bar3(barR.x - w / 2, topL.y, w, upH, P.post);
+  pxc(X, Math.round(160 - w), Math.round(base.y) - Math.round(base.s * 0.9), w * 2, Math.round(base.s * 0.9), "#2b3150");
+  X.globalAlpha = 1;
+}
+
+function drawBall(G) {
+  var b = G.ball;
+  if (!b) return;
+  var i;
+  for (i = 0; i < G.trail.length; i++) {
+    var t = G.trail[i], a = (i + 1) / G.trail.length;
+    var pt = proj(t.x, t.y, t.z);
+    if (pt.y < 0 || pt.y > H) continue;
+    X.globalAlpha = a * 0.55;
+    var ts = Math.max(1, Math.round(pt.s * 0.1));
+    pxc(X, Math.round(pt.x), Math.round(pt.y), ts, ts, t.hot ? P.orange : "#dfe7fa");
+    X.globalAlpha = 1;
+  }
+  /* shadow on the turf, directly below the ball */
+  var sh = proj(b.x, 0, b.z);
+  if (sh.y > 63 && sh.y < H && b.y > 0.1) {
+    X.globalAlpha = Math.max(0.12, 0.5 - b.y * 0.03);
+    var sw = Math.max(1, Math.round(sh.s * 0.16));
+    pxc(X, Math.round(sh.x - sw / 2), Math.round(sh.y), sw, Math.max(1, Math.round(sw * 0.5)), "#14301a");
+    X.globalAlpha = 1;
+  }
+  var p = proj(b.x, b.y, b.z);
+  if (p.y < -20 || p.y > H + 20) return;
+  var size = Math.max(2, p.s * 0.40);
+  if (size >= 10) drawSprite(BALL_BIG, Math.round(p.x - 7), Math.round(p.y - 7), ballPal(), false, 2);
+  else if (size >= 6) drawSprite(BALL_BIG, Math.round(p.x - 3.5), Math.round(p.y - 3.5), ballPal(), false, 1);
+  else if (size >= 4) drawSprite(BALL_MID, Math.round(p.x - 2.5), Math.round(p.y - 2.5), ballPal(), false, 1);
+  else {
+    /* far away it is only a couple of pixels, so outline it to keep it legible */
+    var s2 = Math.max(2, Math.round(size));
+    pxc(X, Math.round(p.x - s2 / 2) - 1, Math.round(p.y - s2 / 2) - 1, s2 + 2, s2 + 2, "#1b1008");
+    pxc(X, Math.round(p.x - s2 / 2), Math.round(p.y - s2 / 2), s2, s2, "#c9742f");
+  }
+}
+
+function drawKicker(G) {
+  var tee = proj(0, 0, 0);
+  var bx = Math.round(tee.x), by = Math.round(tee.y);
+  var frame = 0;
+  if (G.phase === "aim") frame = 0;
+  else if (G.phase === "power") frame = 1;
+  else if (G.phase === "accuracy") frame = 2;
+  else if (G.phase === "kick") frame = G.kickT < 0.09 ? 3 : 4;
+  else frame = 4;
+  /* He stays solid for the whole flight; only the result banner
+     takes the screen away from him. */
+  if (G.phase === "result") return;
+  X.globalAlpha = 1;
+  drawSprite(HOLDER, bx - 28, by - 11, kickerPal(), false, 2);
+  drawSprite(KICKER[frame], bx - 46, by - 24, kickerPal(), false, 2);
+  X.globalAlpha = 1;
+}
+
+/* the ball sitting on the tee before the kick */
+function drawTeeBall(G) {
+  if (G.phase === "kick" || G.phase === "result") return;
+  var tee = proj(0, 0, 0);
+  drawSprite(BALL_BIG, Math.round(tee.x) - 7, Math.round(tee.y) - 13, ballPal(), false, 2);
+}
+
+/* ---------------- aim guide + wind ---------------- */
+function drawAimGuide(G) {
+  if (G.phase !== "aim" && G.phase !== "power" && G.phase !== "accuracy") return;
+  var rad = G.aim * Math.PI / 180, i;
+  for (i = 2; i <= 16; i += 2) {
+    var z = i * 1.6;
+    var p = proj(Math.tan(rad) * z, 0.05, z);
+    if (p.y < 63 || p.y > H) continue;
+    X.globalAlpha = 0.65 - i * 0.03;
+    var s = Math.max(1, Math.round(p.s * 0.09));
+    pxc(X, Math.round(p.x - s / 2), Math.round(p.y), s, s, P.gold);
+    X.globalAlpha = 1;
+  }
+  var head = proj(Math.tan(rad) * 28, 0.05, 28);
+  if (head.y > 63) {
+    textCenter(G.aim === 0 ? "▲" : (G.aim < 0 ? "←" : "→"),
+      head.x, Math.round(head.y) - 10, P.gold, 1, 1);
+  }
+}
+
+function drawFlag(G) {
+  /* a pennant on the far upright that reads the wind at a glance */
+  var d = G.dist;
+  var pole = proj(POST_HALF + 5.2, POST_TOP * 0.34, d);
+  var baseP = proj(POST_HALF + 5.2, 0, d);
+  if (pole.y < 0 || baseP.y > H) return;
+  pxc(X, Math.round(pole.x), Math.round(pole.y), 1, Math.round(baseP.y - pole.y), "#6b769b");
+  var dir = G.windX >= 0 ? 1 : -1;
+  var len = Math.max(2, Math.round(Math.abs(G.windX) * 0.5 + 2));
+  var wob = Math.sin(G.anim * 9) * 1;
+  for (var i = 0; i < len; i++) {
+    var hgt = Math.max(1, 4 - Math.floor(i / 2));
+    pxc(X, Math.round(pole.x) + dir * (i + 1), Math.round(pole.y + wob + i * 0.2), 1, hgt, P.red);
+  }
+}
+
+/* ---------------- weather ---------------- */
+var drops = [];
+function stepWeather(G, dt) {
+  if (G.precip === "none") { drops.length = 0; return; }
+  var want = G.precip === "rain" ? 90 : 70;
+  while (drops.length < want) {
+    drops.push({ x: Math.random() * W, y: Math.random() * H, v: G.precip === "rain" ? 220 + Math.random() * 120 : 26 + Math.random() * 22, w: Math.random() });
+  }
+  for (var i = 0; i < drops.length; i++) {
+    var d = drops[i];
+    d.y += d.v * dt;
+    d.x += (G.windX * 0.5 + (G.precip === "snow" ? Math.sin(G.anim * 2 + d.w * 6) * 8 : 0)) * dt;
+    if (d.y > H) { d.y = -4; d.x = Math.random() * W; }
+    if (d.x < -6) d.x = W + 4; else if (d.x > W + 6) d.x = -4;
+  }
+}
+function drawWeather(G) {
+  if (G.precip === "none") return;
+  var i;
+  X.save();
+  X.beginPath(); X.rect(0, 0, W, PANEL_Y); X.clip();
+  if (G.precip === "rain") {
+    for (i = 0; i < drops.length; i++) {
+      X.globalAlpha = 0.45;
+      pxc(X, drops[i].x, drops[i].y, 1, 4, "#9fc4ef");
+      X.globalAlpha = 1;
+    }
+  } else {
+    for (i = 0; i < drops.length; i++) {
+      X.globalAlpha = 0.8;
+      pxc(X, drops[i].x, drops[i].y, 1, 1, "#eaf2ff");
+      X.globalAlpha = 1;
+    }
+  }
+  X.restore();
+}
+
+/* ---------------- particles ---------------- */
+function burst(G, x, y, n, colors, spread, life) {
+  for (var i = 0; i < n; i++) {
+    G.parts.push({
+      x: x, y: y,
+      vx: (Math.random() * 2 - 1) * spread,
+      vy: (Math.random() * 2 - 1) * spread - spread * 0.4,
+      g: 120 + Math.random() * 90,
+      t: 0, life: life || (0.5 + Math.random() * 0.6),
+      c: colors[Math.floor(Math.random() * colors.length)]
+    });
+  }
+}
+function stepParts(G, dt) {
+  for (var i = G.parts.length - 1; i >= 0; i--) {
+    var p = G.parts[i];
+    p.t += dt;
+    p.vy += p.g * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.t > p.life) G.parts.splice(i, 1);
+  }
+}
+function drawParts(G) {
+  for (var i = 0; i < G.parts.length; i++) {
+    var p = G.parts[i];
+    X.globalAlpha = Math.max(0, 1 - p.t / p.life);
+    pxc(X, p.x, p.y, 2, 2, p.c);
+    X.globalAlpha = 1;
+  }
+}
+
+/* ---------------- HUD and meters ---------------- */
+function drawHud(G) {
+  pxc(X, 0, 0, W, 12, "rgba(5,7,15,0.82)");
+  pxc(X, 0, 12, W, 1, "#39405e");
+  textAt(MODES[G.mode].name, 4, 3, P.gold, 1, 1);
+
+  var right = "";
+  if (G.mode === "gauntlet") right = "STREAK " + G.streak;
+  else if (G.mode === "lives") right = "";
+  else right = "TIME " + Math.max(0, Math.ceil(G.clock));
+  if (right) textAt(right, W - 4 - textWidth(right, 1, 1), 3, "#cfd8ef", 1, 1);
+
+  if (G.mode === "lives") {
+    for (var i = 0; i < 3; i++) {
+      var on = i < G.lives;
+      drawSprite(BALL_MID, W - 10 - i * 8, 3, { ".": null, "#": on ? P.ball : "#2b3150", n: on ? "#a85c2c" : "#232942" }, false, 1);
+    }
+  }
+
+  var mid = "SCORE " + G.score;
+  textCenter(mid, 160, 3, "#e8ecf7", 1, 1);
+
+  /* The bottom third of a behind-the-kicker view is empty turf, so it
+     becomes the control panel: distance and conditions on the left,
+     the two meters on the right. */
+  pxc(X, 0, PANEL_Y, W, H - PANEL_Y, "#0a0e1e");
+  pxc(X, 0, PANEL_Y, W, 1, "#39405e");
+  pxc(X, 0, PANEL_Y + 1, W, 1, "#161c33");
+
+  var dl = G.dist + " YD";
+  textAt(dl, 6, PANEL_Y + 5, P.white, 2, 1);
+  pxc(X, 4, PANEL_Y + 4, 1, 13, P.gold);
+
+  var wtxt, wcol;
+  if (Math.abs(G.windX) < 1.2) { wtxt = "WIND CALM"; wcol = P.green; }
+  else {
+    wtxt = (G.windX < 0 ? "←" : "→") + Math.abs(Math.round(G.windX)) + " MPH";
+    wcol = Math.abs(G.windX) > 11 ? P.red : Math.abs(G.windX) > 5 ? P.orange : "#cfd8ef";
+  }
+  textAt(wtxt, 6, PANEL_Y + 21, wcol, 1, 1);
+  var cond = (G.windZ > 2 ? "TAILWIND" : G.windZ < -2 ? "HEADWIND" : "") +
+    (G.precip === "rain" ? "\nRAIN" : G.precip === "snow" ? "\nSNOW" : "");
+  cond = cond.trim().split("\n");
+  if (cond[0]) textAt(cond[0], 6, PANEL_Y + 29, "#8d9ac2", 1, 1);
+  if (cond[1]) textAt(cond[1], 62, PANEL_Y + 29, "#9fc4ef", 1, 1);
+}
+
+var PANEL_Y = 142;
+var BAR_X = 116, BAR_W = 198;
+function drawMeters(G) {
+  var py = PANEL_Y + 6, ay = PANEL_Y + 22;
+  var showPower = G.phase === "aim" || G.phase === "power"
+    || G.phase === "accuracy" || G.phase === "kick" || G.phase === "result";
+  if (!showPower) return;
+
+  /* ---- power ---- */
+  textAt("PWR", 92, py + 1, "#8d9ac2", 1, 1);
+  pxc(X, BAR_X - 1, py - 1, BAR_W + 2, 11, "#05070f");
+  pxc(X, BAR_X, py, BAR_W, 9, "#141a2e");
+
+  var req = Math.max(0, Math.min(1, G.reqPower));
+  var sweetA = req, sweetB = Math.min(1, req + 0.11);
+  pxc(X, BAR_X + Math.round(sweetA * BAR_W), py, Math.max(2, Math.round((sweetB - sweetA) * BAR_W)), 9, "#1d4a28");
+
+  var fill = G.phase === "power" ? G.power : G.lockedPower;
+  if (G.phase === "aim") fill = 0;
+  var fw = Math.round(fill * BAR_W);
+  var fc = fill < req ? P.red : fill <= sweetB ? P.green : P.gold;
+  pxc(X, BAR_X, py, fw, 9, fc);
+  pxc(X, BAR_X, py, fw, 2, "rgba(255,255,255,0.28)");
+
+  /* the tick you must clear */
+  pxc(X, BAR_X + Math.round(req * BAR_W), py - 3, 1, 15, P.white);
+  pxc(X, BAR_X + Math.round(req * BAR_W) - 1, py - 4, 3, 2, P.white);
+
+  if (G.phase === "power") {
+    var cx = BAR_X + Math.round(G.power * BAR_W);
+    pxc(X, cx - 1, py - 2, 3, 13, P.white);
+  }
+  /* frame */
+  pxc(X, BAR_X - 1, py - 1, BAR_W + 2, 1, "#39405e");
+  pxc(X, BAR_X - 1, py + 9, BAR_W + 2, 1, "#39405e");
+
+  /* ---- accuracy ---- */
+  if (G.phase !== "accuracy" && G.phase !== "kick" && G.phase !== "result") return;
+  textAt("ACC", 92, ay + 1, "#8d9ac2", 1, 1);
+  pxc(X, BAR_X - 1, ay - 1, BAR_W + 2, 11, "#05070f");
+  pxc(X, BAR_X, ay, BAR_W, 9, "#141a2e");
+  var mid = BAR_X + BAR_W / 2;
+  /* graded notch: green dead centre, amber either side */
+  pxc(X, Math.round(mid - BAR_W * 0.085), ay, Math.round(BAR_W * 0.17), 9, "#3a3418");
+  pxc(X, Math.round(mid - BAR_W * 0.0225), ay, Math.max(2, Math.round(BAR_W * 0.045)), 9, "#1d4a28");
+  pxc(X, Math.round(mid), ay - 3, 1, 15, P.white);
+  for (var t = -4; t <= 4; t++) {
+    if (!t) continue;
+    pxc(X, Math.round(mid + t * BAR_W * 0.105), ay + 7, 1, 2, "#39405e");
+  }
+  var acx = Math.round(mid + (G.phase === "accuracy" ? G.acc : G.err) * (BAR_W / 2));
+  var alive = G.phase === "accuracy";
+  pxc(X, acx - 1, ay - 2, 3, 13, alive ? P.white : (Math.abs(G.err) < 0.045 ? P.green : P.orange));
+  pxc(X, BAR_X - 1, ay - 1, BAR_W + 2, 1, "#39405e");
+  pxc(X, BAR_X - 1, ay + 9, BAR_W + 2, 1, "#39405e");
+}
+
+function drawPrompt(G) {
+  var t = null;
+  if (G.phase === "aim") t = "AIM WITH ← →    PRESS TO START";
+  else if (G.phase === "power") t = "PRESS TO SET POWER";
+  else if (G.phase === "accuracy") t = "PRESS ON THE NOTCH";
+  if (!t) return;
+  var blink = G.phase === "aim" ? (Math.floor(G.anim * 2) % 2 === 0) : true;
+  if (blink) textCenter(t, 160, 130, "#9fadd4", 1, 1);
+}
+
+/* ---------------- result banner ---------------- */
+function drawBanner(G) {
+  if (G.phase !== "result" || !G.result) return;
+  var r = G.result, t = G.resultT;
+  var slide = Math.min(1, t / 0.14);
+  var y = Math.round(58 + (1 - slide) * -40);
+  var col = r.good ? P.gold : P.red;
+  pxc(X, 0, y - 6, W, 24, "rgba(5,7,15,0.86)");
+  pxc(X, 0, y - 6, W, 1, col);
+  pxc(X, 0, y + 17, W, 1, col);
+  textCenterShadow(r.text, 160, y, col, "#05070f", 2, 1);
+
+  if (r.good && r.pts) {
+    textCenter("+" + r.pts, 160, y + 24, P.white, 2, 1);
+    for (var i = 0; i < r.notes.length; i++) {
+      textCenter(r.notes[i], 160, y + 42 + i * 9, i === 0 && r.perfect ? P.green : "#9fadd4", 1, 1);
+    }
+  }
+  if (t > 1.05) textCenter("PRESS TO CONTINUE", 160, 130, (Math.floor(t * 2) % 2 ? "#9fadd4" : "#5d678c"), 1, 1);
+}
+
+/* ---------------- screens ---------------- */
+var menu = { sel: 0, t: 0 };
+var MODE_LIST = ["gauntlet", "lives", "rush"];
+
+var menuBg = null;
+function drawMenu() {
+  pxc(X, 0, 0, W, H, "#070b1a");
+  if (!menuBg) {
+    /* a quiet stadium behind the title, drawn once and kept */
+    renderStadium({ sky: "night", dist: 38, score: 0, makes: 0, kicks: 0, precip: "none", windX: 0, hideBoard: true });
+    menuBg = document.createElement("canvas");
+    menuBg.width = W; menuBg.height = H;
+    menuBg.getContext("2d").drawImage(bgCv, 0, 0);
+  }
+  X.globalAlpha = 0.55; X.drawImage(menuBg, 0, 0); X.globalAlpha = 1;
+  pxc(X, 0, 0, W, H, "rgba(7,11,26,0.55)");
+
+  textCenterShadow("SPLIT THE", 160, 16, P.gold, "#7a4b00", 3, 1);
+  textCenterShadow("UPRIGHTS", 160, 40, P.gold, "#7a4b00", 3, 1);
+  pxc(X, 70, 62, 180, 1, "#39405e");
+
+  for (var i = 0; i < MODE_LIST.length; i++) {
+    var m = MODES[MODE_LIST[i]], b = BEST[MODE_LIST[i]];
+    var y = 68 + i * 34, on = menu.sel === i;
+    pxc(X, 28, y, 264, 31, on ? "#1b2550" : "#101730");
+    pxc(X, 28, y, 3, 31, on ? P.gold : "#39405e");
+    if (on) {
+      pxc(X, 28, y, 264, 1, P.gold); pxc(X, 28, y + 30, 264, 1, P.gold);
+      pxc(X, 289, y, 3, 31, P.gold);
+    }
+    textAt(m.name, 38, y + 5, on ? P.gold : "#cfd8ef", 1, 1);
+    var lines = m.blurb.split("\n");
+    textAt(lines[0], 38, y + 14, "#8d9ac2", 1, 1);
+    if (lines[1]) textAt(lines[1], 38, y + 22, "#6b769b", 1, 1);
+    var bt = MODE_LIST[i] === "gauntlet"
+      ? (b.dist ? "BEST " + b.dist + "YD" : "")
+      : (b.score ? "BEST " + b.score : "");
+    if (bt) textAt(bt, 286 - textWidth(bt, 1, 1), y + 5, P.green, 1, 1);
+  }
+  var blink = Math.floor(menu.t * 2) % 2 === 0;
+  if (blink) textCenter("↑ ↓ CHOOSE    PRESS TO PLAY", 160, 172, "#9fadd4", 1, 1);
+}
+
+function drawGameOver(G) {
+  pxc(X, 0, 0, W, H, "rgba(5,7,15,0.93)");
+  pxc(X, 0, 0, W, H, "rgba(5,7,15,0.6)");
+  textCenterShadow(G.mode === "rush" ? "TIME!" : "RUN OVER", 160, 18, P.gold, "#7a4b00", 3, 1);
+  var rows = [];
+  if (G.mode === "gauntlet") {
+    rows.push(["LONGEST MAKE", G.longest + " YD"]);
+    rows.push(["KICKS MADE", String(G.makes)]);
+    rows.push(["BEST STREAK", String(G.bestStreak)]);
+  } else {
+    rows.push(["MADE", G.makes + " / " + G.kicks]);
+    rows.push(["LONGEST", G.longest + " YD"]);
+    rows.push(["BEST STREAK", String(G.bestStreak)]);
+  }
+  rows.push(["SCORE", String(G.score)]);
+  for (var i = 0; i < rows.length; i++) {
+    var y = 54 + i * 16;
+    textAt(rows[i][0], 56, y, "#8d9ac2", 1, 1);
+    textAt(rows[i][1], 264 - textWidth(rows[i][1], 2, 1), y - 3, i === rows.length - 1 ? P.gold : "#e8ecf7", 2, 1);
+  }
+  if (G.newBest) {
+    var pulse = Math.floor(menu.t * 4) % 2 === 0;
+    textCenter("NEW PERSONAL BEST", 160, 126, pulse ? P.green : "#2f6b35", 1, 1);
+  }
+  textCenter("PRESS TO PLAY AGAIN", 160, 148, "#cfd8ef", 1, 1);
+  textCenter("ESC FOR THE MENU", 160, 160, "#6b769b", 1, 1);
+  drawParts(G);
+}
+
+/* ---------------- main loop ---------------- */
+var G = null, view = "menu", last = 0, acc = 0;
+
+function startMode(mode) {
+  G = newGame(mode);
+  G.reqPower = minPower(G.dist);
+  renderStadium(G);
+  view = "play";
+}
+
+function update(dt) {
+  menu.t += dt;
+  if (!G || view !== "play") { if (G) stepParts(G, dt); return; }
+  G.anim += dt;
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 3.2);
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 4);
+  stepWeather(G, dt);
+  stepParts(G, dt);
+
+  if (G.mode === "rush" && (G.phase === "aim" || G.phase === "power" || G.phase === "accuracy")) {
+    G.clock -= dt;
+    if (G.clock <= 0) { G.clock = 0; endRun(); return; }
+  }
+
+  if (G.phase === "aim") {
+    var step = 14 * dt;
+    if (keys.left) G.aim = Math.max(-AIM_MAX, G.aim - step);
+    if (keys.right) G.aim = Math.min(AIM_MAX, G.aim + step);
+  } else if (G.phase === "power") {
+    G.power += 0.95 * dt;
+    if (G.power >= 1) { G.power = 1; lockPower(); }
+  } else if (G.phase === "accuracy") {
+    var over = Math.max(0, G.lockedPower - (G.reqPower + 0.11));
+    var spd = 1.55 + over * 2.4;
+    G.acc -= spd * dt;
+    if (G.acc <= -1) { G.acc = -1; lockAccuracy(); }
+  } else if (G.phase === "kick") {
+    G.kickT += dt;
+    var b = G.ball;
+    /* time slows as the ball reaches the posts, for the long look */
+    var near = b && !b.crossed && b.z > G.dist - 9;
+    var scale = near ? 0.33 : 1;
+    var sub = dt * scale;
+    var steps = 4, i;
+    for (i = 0; i < steps; i++) stepBall(G, sub / steps);
+    if (b) {
+      G.trail.push({ x: b.x, y: b.y, z: b.z, hot: G.pendingPerfect });
+      if (G.trail.length > 26) G.trail.shift();
+    }
+    if (G.pending && !G.resolved) {
+      G.resolved = true;
+      onVerdict();
+    }
+    if (b && (!b.live || b.t > 4.2) && G.resolved) {
+      if (G.settleT == null) G.settleT = 0;
+      G.settleT += dt;
+      if (G.settleT > 0.45) { G.settleT = null; G.resolved = false; settle(G); }
+    }
+  } else if (G.phase === "result") {
+    G.resultT += dt;
+  }
+}
+
+function onVerdict() {
+  var r = G.pending;
+  G.shake = r.good ? 1 : 0.45;
+  G.flash = r.good ? 1 : 0;
+  var p = proj(r.x, Math.max(r.y, 0), G.dist);
+  if (r.good) {
+    burst(G, p.x, p.y, 26, [P.gold, P.white, P.green], 90, 0.8);
+    crowdCheer = 1;
+  } else {
+    burst(G, p.x, Math.max(p.y, 40), 12, ["#8d9ac2", "#5d678c"], 55, 0.5);
+    crowdCheer = -1;
+  }
+  if (r.kind === "crossbar" || r.kind === "upright") {
+    burst(G, p.x, p.y, 18, [P.gold, P.orange, P.white], 120, 0.7);
+    G.shake = 1.2;
+  }
+}
+var crowdCheer = 0;
+
+function lockPower() {
+  G.lockedPower = G.power;
+  G.pendingPerfect = false;
+  G.acc = 1;
+  G.phase = "accuracy";
+}
+function lockAccuracy() {
+  G.err = G.acc;
+  G.pendingPerfect = Math.abs(G.err) < 0.045 && G.lockedPower >= G.reqPower && G.lockedPower <= G.reqPower + 0.11;
+  G.resolved = false;
+  G.settleT = null;
+  /* a kick with almost nothing on it gets swallowed by the rush */
+  if (G.lockedPower < 0.16) {
+    G.ball = { x: 0, y: 0.4, z: 1.2, vx: (Math.random() - 0.5) * 6, vy: 1, vz: 3, spin: 0, live: true, t: 0, crossed: true, hit: "block" };
+    G.pending = { good: false, kind: "blocked", x: 0, y: 0 };
+    G.phase = "kick"; G.kickT = 0; G.trail = [];
+    G.shake = 1;
+    return;
+  }
+  launch(G);
+}
+
+function endRun() {
+  G.newBest = recordBest(G);
+  G.resultT = 0;
+  if (G.newBest) burst(G, 160, 30, 60, [P.gold, P.green, P.white, P.red, P.blue], 110, 1.6);
+  view = "over";
+}
+
+function press() {
+  if (view === "menu") { startMode(MODE_LIST[menu.sel]); return; }
+  if (view === "over") { startMode(G.mode); return; }
+  if (!G) return;
+  if (G.phase === "aim") { G.power = 0; G.phase = "power"; }
+  else if (G.phase === "power") lockPower();
+  else if (G.phase === "accuracy") lockAccuracy();
+  else if (G.phase === "result") {
+    if (G.resultT < 0.45) return;
+    if (runOver(G)) { endRun(); return; }
+    nextKick(G);
+    renderStadium(G);
+  }
+}
+
+/* ---------------- draw ---------------- */
+function draw() {
+  if (view === "menu") { drawMenu(); return; }
+  if (!G) return;
+
+  var sx = 0, sy = 0;
+  if (G.shake > 0) {
+    sx = Math.round((Math.random() * 2 - 1) * G.shake * 4);
+    sy = Math.round((Math.random() * 2 - 1) * G.shake * 3);
+  }
+  pxc(X, 0, 0, W, H, "#05070f");
+  X.drawImage(bgCv, sx, sy);
+
+  /* crowd reaction: a scatter of bright pixels through the bowl */
+  if (crowdCheer > 0 && G.shake > 0.05) {
+    for (var i = 0; i < 90; i++) {
+      var cx = Math.floor(Math.random() * W), cy = 43 + Math.floor(Math.random() * 18);
+      pxc(X, cx + sx, cy + sy, 1, 1, Math.random() < 0.5 ? "#fff6c8" : "#ffffff");
+    }
+  }
+
+  X.save();
+  X.translate(sx, sy);
+  drawFlag(G);
+  drawPosts(G);
+  drawAimGuide(G);
+  drawTeeBall(G);
+  drawBall(G);
+  if (G.ball && G.ball.crossed) drawPosts(G, 0.9);   /* posts occlude the ball once it is past */
+  drawKicker(G);
+  drawParts(G);
+  X.restore();
+
+  drawWeather(G);
+
+  if (G.flash > 0) {
+    X.globalAlpha = G.flash * 0.5;
+    pxc(X, 0, 0, W, H, "#ffffff");
+    X.globalAlpha = 1;
+  }
+
+  drawHud(G);
+  /* A high kick passes through the status strip. Redraw it on top so
+     the ball is never swallowed at the apex. */
+  if (G.ball && G.ball.live) {
+    var pb = proj(G.ball.x, G.ball.y, G.ball.z);
+    if (pb.y < 18) { X.save(); X.translate(sx, sy); drawBall(G); X.restore(); }
+  }
+  if (view !== "over") {
+    drawMeters(G);
+    drawPrompt(G);
+    drawBanner(G);
+  } else drawGameOver(G);
+}
+
+function frame(ts) {
+  if (!last) last = ts;
+  var dt = Math.min(0.05, (ts - last) / 1000);
+  last = ts;
+  update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- input ---------------- */
+var keys = { left: false, right: false };
+function setKey(e, down) {
+  var k = e.key;
+  if (k === "ArrowLeft" || k === "a" || k === "A") { keys.left = down; e.preventDefault(); }
+  else if (k === "ArrowRight" || k === "d" || k === "D") { keys.right = down; e.preventDefault(); }
+}
+window.addEventListener("keydown", function (e) {
+  if (e.repeat && (e.key === " " || e.key === "Enter")) { e.preventDefault(); return; }
+  if (view === "menu") {
+    if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") { menu.sel = (menu.sel + 2) % 3; e.preventDefault(); return; }
+    if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") { menu.sel = (menu.sel + 1) % 3; e.preventDefault(); return; }
+  }
+  if (e.key === "Escape") { view = "menu"; e.preventDefault(); return; }
+  if (e.key === " " || e.key === "Enter") { press(); e.preventDefault(); return; }
+  setKey(e, true);
+});
+window.addEventListener("keyup", function (e) { setKey(e, false); });
+
+CV.addEventListener("pointerdown", function (e) {
+  /* Inside an iframe the keys only arrive once the frame has focus. */
+  try { window.focus(); } catch (err) { }
+  if (view === "menu") {
+    var r = CV.getBoundingClientRect();
+    var y = (e.clientY - r.top) / r.height * H;
+    var idx = Math.floor((y - 68) / 34);
+    if (idx >= 0 && idx < 3) menu.sel = idx;
+  }
+  press();
+  e.preventDefault();
+});
+
+function holdButton(id, side) {
+  var b = document.getElementById(id);
+  var set = function (v) { return function (e) { keys[side] = v; b.classList.toggle("hot", v); e.preventDefault(); }; };
+  b.addEventListener("pointerdown", set(true));
+  b.addEventListener("pointerup", set(false));
+  b.addEventListener("pointerleave", set(false));
+  b.addEventListener("pointercancel", set(false));
+}
+holdButton("kL", "left");
+holdButton("kR", "right");
+document.getElementById("kA").addEventListener("pointerdown", function (e) { press(); e.preventDefault(); });
+document.getElementById("kM").addEventListener("click", function () { document.body.classList.toggle("flat"); });
+
+/* ---------------- fit the canvas to whole pixels ---------------- */
+function fit() {
+  var pad = 40;
+  var sw = Math.max(1, window.innerWidth - pad), sh = Math.max(1, window.innerHeight - 130);
+  var s = Math.max(1, Math.min(Math.floor(sw / W), Math.floor(sh / H)));
+  CV.style.width = (W * s) + "px";
+  CV.style.height = (H * s) + "px";
+}
+window.addEventListener("resize", fit);
+
+/* ---------------- boot ---------------- */
+fit();
+Promise.resolve(loadBest()).catch(function () { }).then(function () {
+  requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>
