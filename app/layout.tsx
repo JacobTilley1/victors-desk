@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import GoogleAnalytics from '@/components/google-analytics';
+import AdSenseScript from '@/components/ads/adsense-script';
 import Grow from '@/components/grow';
 import GiveawayBar from '@/components/giveaway-bar';
 import { Inter, Bitter } from 'next/font/google';
@@ -114,6 +115,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <GiveawayBar />
         <Analytics />
         <GoogleAnalytics />
+        <AdSenseScript />
       </body>
     </html>
   );

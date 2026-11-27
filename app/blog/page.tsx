@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import PostCard from '@/components/post-card';
+import AdUnit from '@/components/ads/ad-unit';
 import EmptyState from '@/components/empty-state';
 import { getPublishedPosts, getCommentCounts } from '@/lib/queries';
 import { TEAMS } from '@/lib/constants';
@@ -127,13 +128,22 @@ export default async function BlogIndex({
             action={<Link href="/blog" className="btn-ghost btn-sm">Clear filters</Link>}
           />
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {posts.map((p, i) => (
-              <div key={p.id} className="animate-fade-up" style={{ animationDelay: `${(i % 6) * 60}ms` }}>
-                <PostCard post={p} commentCount={counts[p.id] ?? 0} priority={i < 3} />
-              </div>
-            ))}
-          </div>
+          <>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {posts.map((p, i) => (
+                <div key={p.id} className="animate-fade-up" style={{ animationDelay: `${(i % 6) * 60}ms` }}>
+                  <PostCard post={p} commentCount={counts[p.id] ?? 0} priority={i < 3} />
+                </div>
+              ))}
+            </div>
+            {/*
+              Below the grid rather than spliced into it. A unit dropped in
+              among the cards would have to pretend to be a story to fit the
+              layout, and an ad shaped like your own content is the thing
+              AdSense policy on deceptive placement is actually about.
+            */}
+            <AdUnit slot="feed" minHeight={250} format="horizontal" className="mt-10" />
+          </>
         )}
 
         {totalPages > 1 && (

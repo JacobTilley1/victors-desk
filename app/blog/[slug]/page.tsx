@@ -8,6 +8,8 @@ import type { Metadata } from 'next';
 import Avatar from '@/components/avatar';
 import TeamBadge from '@/components/team-badge';
 import Comments from '@/components/comments';
+import AdUnit from '@/components/ads/ad-unit';
+import { splitArticle } from '@/lib/ads-split';
 import SubscribeForm from '@/components/subscribe-form';
 import LikeButton from '@/components/like-button';
 import ShareButton from '@/components/share-button';
@@ -273,10 +275,29 @@ export default async function PostPage({ params }: { params: { slug: string } })
 
       {/* body */}
       <div className="container-page max-w-3xl py-12">
-        <div
-          className="prose-mich"
-          dangerouslySetInnerHTML={{ __html: lazyLoadImages(post.content_html) }}
-        />
+        {/*
+          The body is cut at top-level block boundaries so ad units can sit
+          inside the text rather than only after it, where almost nobody
+          reaches. Short posts come back as a single piece and carry none.
+        */}
+        {(() => {
+          const body = splitArticle(lazyLoadImages(post.content_html));
+          return (
+            <>
+              <div className="prose-mich" dangerouslySetInnerHTML={{ __html: body.head }} />
+              {body.breaks >= 1 && <AdUnit slot="articleTop" minHeight={280} format="horizontal" />}
+              {body.middle && (
+                <div className="prose-mich" dangerouslySetInnerHTML={{ __html: body.middle }} />
+              )}
+              {body.breaks >= 2 && <AdUnit slot="articleMid" minHeight={280} format="horizontal" />}
+              {body.tail && (
+                <div className="prose-mich" dangerouslySetInnerHTML={{ __html: body.tail }} />
+              )}
+            </>
+          );
+        })()}
+
+        <AdUnit slot="articleEnd" minHeight={280} />
 
         {/*
           Right after the last paragraph — the moment someone has finished and

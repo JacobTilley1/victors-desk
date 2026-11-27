@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "backup": "node scripts/backup.mjs",
-    "indexnow": "node scripts/indexnow.mjs"
+    "indexnow": "node scripts/indexnow.mjs",
+    "test:ads": "node scripts/test-ads-split.mjs && node scripts/test-ads-config.mjs",
+    "test:trivia": "node scripts/test-trivia-bank.mjs"
   },
   "dependencies": {
     "@google-analytics/data": "^4.12.0",

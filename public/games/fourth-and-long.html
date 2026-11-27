@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>FOURTH AND LONG</title>
+<style>
+/* ============================================================
+   FOURTH AND LONG — a 480x270 stadium board.
+   Wider than the action games on this site because a hundred
+   character question has to be read, not just glanced at.
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#05070c}
+body{
+  display:flex;align-items:center;justify-content:center;
+  font-family:ui-monospace,"Cascadia Mono","Segoe UI Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;
+  color:#cfd8ef;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+  user-select:none;-webkit-user-select:none;
+}
+#wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px}
+#cab{
+  position:relative;padding:10px;
+  background:linear-gradient(#182438,#0a1018);
+  border:2px solid #2f4258;
+  box-shadow:0 0 0 2px #05070c, 0 18px 46px rgba(0,0,0,.7);
+}
+#cab::before{content:"";position:absolute;inset:4px;border:1px solid #243547;pointer-events:none}
+canvas{
+  display:block;image-rendering:pixelated;image-rendering:crisp-edges;
+  background:#070c16;cursor:default;touch-action:manipulation;
+  width:min(96vw, 960px);height:auto;
+}
+#scan{
+  position:absolute;inset:10px;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,
+    rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.14) 3px, rgba(0,0,0,.14) 4px);
+  mix-blend-mode:multiply;
+}
+body.flat #scan{display:none}
+
+#pad{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center}
+.key{
+  font:inherit;font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+  background:#17243a;color:#cfd8ef;border:2px solid #33485f;
+  padding:8px 14px;cursor:pointer;min-width:46px;
+}
+.key:active,.key.hot{background:#26496a;border-color:#ffbe2e;color:#ffbe2e}
+.key.wide{min-width:120px}
+#hint{font-size:10.5px;letter-spacing:.09em;color:#6d7f94;text-align:center;line-height:1.7;max-width:720px}
+#hint b{color:#a9bed1;font-weight:400}
+@media (max-width:700px){ #hint{display:none} .key{padding:10px 12px} }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="cab">
+    <canvas id="c" width="480" height="270"></canvas>
+    <div id="scan"></div>
+  </div>
+  <div id="pad">
+    <button class="key" id="kA">A</button>
+    <button class="key" id="kB">B</button>
+    <button class="key" id="kC">C</button>
+    <button class="key" id="kD">D</button>
+    <button class="key wide" id="kGo">Start / Next</button>
+    <button class="key" id="kM" title="Toggle the CRT filter">CRT</button>
+  </div>
+  <div id="hint">
+    <b>A B C D</b> or <b>1 2 3 4</b> to answer, or click an answer on the board.
+    <b>Space</b> starts a round and moves on once the answer is up. <b>Esc</b> returns to the menu.
+  </div>
+</div>
+<script>
+/* 500 NFL trivia questions, exactly as supplied.
+   Each row is [question, [four options], index of the correct one].
+   Nothing has been added, reworded or re-sorted. */
+var BANK = [["How many teams currently compete in the NFL?",["34","30","36","32"],3],["What position did Antonio Gates primarily play?",["tight end","quarterback","kicker","return specialist"],0],["Longest interception return in Super Bowl history?",["Malcolm Butler","James Harrison","Rod Martin","Ty Law"],1],["How many yards must an offense gain for a new first down?",["5","10","15","20"],1],["First wild-card team to win a Super Bowl?",["2010 Green Bay Packers","2005 Pittsburgh Steelers","1980 Oakland Raiders","1997 Denver Broncos"],2],["First overall pick of the 2023 NFL Draft?",["C. J. Stroud","Will Levis","Anthony Richardson","Bryce Young"],3],["What position did Dallas Clark primarily play?",["cornerback","tight end","return specialist","linebacker"],1],["Who won NFL MVP in 2015?",["Cam Newton","Tom Brady","Aaron Rodgers","Carson Palmer"],0],["Draft round in which Tom Brady was selected?",["Seventh","Fourth","Fifth","Sixth"],3],["What position did Patrick Willis primarily play?",["linebacker","wide receiver","safety","defensive end"],0],["What position did Odell Beckham Jr. primarily play?",["wide receiver","kicker","running back","return specialist"],0],["What position did Ken Stabler primarily play?",["kicker","defensive tackle","quarterback","wide receiver"],2],["College attended by Calvin Johnson?",["Georgia","Georgia Tech","Clemson","Florida State"],1],["Who was the first player drafted in the inaugural NFL Draft in 1936?",["Bronko Nagurski","Jay Berwanger","Sammy Baugh","Don Hutson"],1],["Which player is associated with the Detroit Lions and played defensive tackle? (Ndamukong Suh edition)",["Tyreek Hill","Ndamukong Suh","Jalen Ramsey","Curtis Martin"],1],["Largest Super Bowl comeback through 2025?",["25 points","18 points","21 points","28 points"],0],["What position did Warren Moon primarily play?",["quarterback","wide receiver","running back","linebacker"],0],["How many regular-season games did each NFL team play in 2025?",["17","15","18","16"],0],["Who won NFL MVP in 2018?",["Aaron Donald","Patrick Mahomes","Tom Brady","Drew Brees"],1],["How many Super Bowls did Tom Brady win as a player?",["7","5","8","6"],0],["What position did Curtis Martin primarily play?",["defensive end","return specialist","quarterback","running back"],3],["What position did Brian Dawkins primarily play?",["defensive tackle","return specialist","safety","kicker"],2],["What position did Matthew Stafford primarily play?",["return specialist","cornerback","safety","quarterback"],3],["What position did Steve Smith Sr. primarily play?",["linebacker","wide receiver","cornerback","defensive tackle"],1],["Who holds the NFL record for career interceptions thrown?",["Vinny Testaverde","Brett Favre","George Blanda","Dan Marino"],1],["Which player is associated with the Baltimore Ravens and played kicker? (Justin Tucker edition)",["Justin Tucker","Michael Thomas","Jason Witten","Aaron Rodgers"],0],["How many sacks did Michael Strahan record in 2001?",["20.5","23","22.5","21"],2],["Which player was selected first overall in the 2019 NFL Draft?",["Daniel Jones","Dwayne Haskins","Nick Bosa","Kyler Murray"],3],["How many interceptions did Night Train Lane make in 1952?",["14","15","13","12"],0],["Who won NFL MVP in 2019?",["Patrick Mahomes","Christian McCaffrey","Russell Wilson","Lamar Jackson"],3],["Who was the MVP of Super Bowl XLVIII?",["Richard Sherman","Marshawn Lynch","Russell Wilson","Malcolm Smith"],3],["How long is each regulation NFL quarter?",["15 minutes","12 minutes","10 minutes","20 minutes"],0],["Which player was selected first overall in the 2017 NFL Draft?",["Myles Garrett","Patrick Mahomes","Deshaun Watson","Mitchell Trubisky"],0],["Most career points scored?",["Gary Anderson","Morten Andersen","Adam Vinatieri","Stephen Gostkowski"],2],["What position did Reggie Bush primarily play?",["cornerback","running back","quarterback","defensive tackle"],1],["Which player is associated with the NFL record for rushing yards in a rookie season?",["Eric Dickerson","Saquon Barkley","Adrian Peterson","Ezekiel Elliott"],0],["What position did Tyreek Hill primarily play?",["wide receiver","safety","running back","cornerback"],0],["First overall pick of the 2001 NFL Draft?",["Richard Seymour","LaDainian Tomlinson","Drew Brees","Michael Vick"],3],["Which quarterback was selected first overall in the 2018 NFL Draft?",["Baker Mayfield","Josh Allen","Lamar Jackson","Sam Darnold"],0],["How many points is a safety worth?",["1","2","4","3"],1],["What position did Cris Carter primarily play?",["defensive end","kicker","wide receiver","safety"],2],["Which quarterback was selected 27th overall in the 1983 NFL Draft?",["John Elway","Dan Marino","Jim Kelly","Ken O’Brien"],1],["How many points is a kicked extra point worth?",["3","0","1","2"],2],["Which team is publicly owned by its fans?",["Green Bay Packers","Pittsburgh Steelers","Chicago Bears","Dallas Cowboys"],0],["What position did Bart Starr primarily play?",["defensive tackle","cornerback","quarterback","running back"],2],["Which team won Super Bowl XXXII, ending an NFC title streak?",["Atlanta Falcons","Denver Broncos","Green Bay Packers","New England Patriots"],1],["Which player returned an onside kick to open the second half of Super Bowl XLIV?",["Darren Sharper scored","The Saints recovered it (not returned for a touchdown)","Reggie Bush scored","Pierre Thomas scored"],1],["What position did Frank Gore primarily play?",["running back","tight end","wide receiver","safety"],0],["In what year did the APFA become the NFL?",["1920","1922","1925","1930"],1],["What is the trophy for the AFC champion called?",["Vince Lombardi Trophy","George Halas Trophy","Lamar Hunt Trophy","Pete Rozelle Trophy"],2],["College attended by Barry Sanders?",["Kansas State","Oklahoma State","Oklahoma","Texas Tech"],1],["College attended by Saquon Barkley?",["Penn State","Michigan","Ohio State","Pittsburgh"],0],["What position did Darrelle Revis primarily play?",["running back","cornerback","safety","quarterback"],1],["What position did Randy Moss primarily play?",["quarterback","kicker","linebacker","wide receiver"],3],["Most consecutive Super Bowl wins by a franchise?",["Five","Three","Four","Two"],3],["Which coach led the 2013 Seahawks to a Super Bowl title?",["Dan Quinn","Pete Carroll","Jim Harbaugh","Mike Holmgren"],1],["What position did Reggie Wayne primarily play?",["safety","return specialist","linebacker","wide receiver"],3],["Who was the MVP of Super Bowl LVI?",["Joe Burrow","Matthew Stafford","Cooper Kupp","Aaron Donald"],2],["Who was Super Bowl LII MVP?",["Nick Foles","Brandon Graham","Tom Brady","Zach Ertz"],0],["What position did Troy Polamalu primarily play?",["safety","defensive end","cornerback","kicker"],0],["Which franchise was once the Portsmouth Spartans?",["Chicago Bears","Indianapolis Colts","Cleveland Browns","Detroit Lions"],3],["What position did Chris Godwin primarily play?",["tight end","safety","return specialist","wide receiver"],3],["Most career official sacks?",["Reggie White","Julius Peppers","Kevin Greene","Bruce Smith"],3],["How many players per team are on the field during a normal NFL play?",["10","12","9","11"],3],["Who holds the NFL record for passing yards in a single NFL game (1951)?",["Matt Schaub","Joe Burrow","Warren Moon","Norm Van Brocklin"],3],["College attended by J. J. Watt?",["Iowa","Minnesota","Wisconsin","Michigan"],2],["What position did Jason Witten primarily play?",["cornerback","quarterback","wide receiver","tight end"],3],["Which team plays at Arrowhead Stadium?",["Kansas City Chiefs","Denver Broncos","Las Vegas Raiders","Los Angeles Chargers"],0],["Which division contains the New Orleans Saints?",["AFC North","AFC South","NFC South","AFC East"],2],["Which player is associated with the New York Giants and played running back? (Saquon Barkley edition)",["T.J. Watt","Saquon Barkley","Jamaal Charles","A.J. Brown"],1],["College attended by Aaron Donald?",["West Virginia","Temple","Penn State","Pittsburgh"],3],["Which player is associated with the New England Patriots and played kicker? (Adam Vinatieri edition)",["Troy Aikman","Adam Vinatieri","Demaryius Thomas","Champ Bailey"],1],["What position did Marvin Harrison primarily play?",["quarterback","tight end","return specialist","wide receiver"],3],["Which division contains the Tennessee Titans?",["NFC East","NFC West","NFC North","AFC South"],3],["What position did Christian McCaffrey primarily play?",["safety","return specialist","quarterback","running back"],3],["What position did Marshall Faulk primarily play?",["running back","tight end","linebacker","kicker"],0],["Which team plays home games at Lambeau Field?",["Detroit Lions","Chicago Bears","Green Bay Packers","Minnesota Vikings"],2],["Which division contains the Cincinnati Bengals?",["AFC West","NFC North","NFC East","AFC North"],3],["Who won NFL MVP in 2023?",["Dak Prescott","Josh Allen","Christian McCaffrey","Lamar Jackson"],3],["Who was the MVP of Super Bowl XXXV?",["Trent Dilfer","Ray Lewis","Jamal Lewis","Rod Woodson"],1],["Who holds the NFL record for first 50-touchdown passing season?",["Dan Marino","Peyton Manning","Tom Brady","Patrick Mahomes"],2],["Who holds the NFL record for consecutive games with a touchdown pass?",["Drew Brees","Peyton Manning","Tom Brady","Dan Marino"],0],["What position did Adrian Peterson primarily play?",["cornerback","running back","wide receiver","quarterback"],1],["How many passing yards did Norm Van Brocklin throw in his record 1951 game?",["575","544","527","554"],3],["Which division contains the Carolina Panthers?",["NFC South","AFC West","AFC North","NFC East"],0],["What position did Tony Gonzalez primarily play?",["cornerback","safety","tight end","defensive tackle"],2],["What position did Terrell Owens primarily play?",["tight end","return specialist","wide receiver","kicker"],2],["College attended by Randy Moss?",["Marshall","Virginia Tech","Ohio State","West Virginia"],0],["What position did Andrew Luck primarily play?",["quarterback","defensive tackle","wide receiver","cornerback"],0],["What is the answer to this NFL receiving record: career receiving yards?",["Larry Fitzgerald","Randy Moss","Terrell Owens","Jerry Rice"],3],["Draft round in which Dak Prescott was selected?",["Third","Second","Fifth","Fourth"],3],["Which team began play as an expansion franchise in 2002?",["Jacksonville Jaguars","Houston Texans","Carolina Panthers","Tennessee Titans"],1],["Which team scored 70 points against Denver in 2023?",["Miami Dolphins","Kansas City Chiefs","Buffalo Bills","San Francisco 49ers"],0],["Who won NFL MVP in 1971 as a defensive player?",["Dick Butkus","Mean Joe Greene","Alan Page","Jack Lambert"],2],["Which franchise moved from Baltimore to Indianapolis in 1984?",["Cardinals","Ravens","Colts","Browns"],2],["College attended by Myles Garrett?",["Texas A&M","Baylor","Oklahoma","Texas"],0],["Which team was on the losing end of the Music City Miracle?",["Buffalo Bills","Tennessee Titans","Pittsburgh Steelers","Indianapolis Colts"],0],["What position did Bruce Smith primarily play?",["defensive end","cornerback","quarterback","running back"],0],["What position did Hines Ward primarily play?",["wide receiver","defensive tackle","kicker","linebacker"],0],["How many points is a successful two-point conversion worth?",["2","6","1","3"],0],["How many rushing yards did Eric Dickerson gain in 1984?",["2,008","2,053","2,105","2,097"],2],["Which division contains the Indianapolis Colts?",["NFC South","AFC West","AFC South","NFC West"],2],["How many receiving yards did Calvin Johnson gain in 2012?",["1,871","2,005","1,964","1,947"],2],["What position did Kam Chancellor primarily play?",["safety","defensive end","wide receiver","running back"],0],["College attended by Eli Manning?",["LSU","Tennessee","Mississippi State","Ole Miss"],3],["Which division contains the Kansas City Chiefs?",["NFC West","AFC West","AFC East","NFC East"],1],["In what year did the AFL-NFL merger take effect?",["1966","1976","1970","1967"],2],["What position did Joe Namath primarily play?",["safety","kicker","quarterback","running back"],2],["How many points is a field goal worth?",["2","3","6","4"],1],["What position did Richard Sherman primarily play?",["safety","running back","cornerback","kicker"],2],["Most sacks in one season?",["Michael Strahan and T. J. Watt","Myles Garrett and Jared Allen","Aaron Donald and J. J. Watt","Reggie White and Bruce Smith"],0],["What position did DeSean Jackson primarily play?",["running back","wide receiver","defensive end","linebacker"],1],["First overall pick of the 2012 NFL Draft?",["Ryan Tannehill","Russell Wilson","Robert Griffin III","Andrew Luck"],3],["Who scored the winning touchdown in the Ice Bowl?",["Donny Anderson","Jim Taylor","Boyd Dowler","Bart Starr"],3],["Which division contains the Minnesota Vikings?",["NFC South","AFC South","NFC North","AFC East"],2],["Who were the Super Bowl champions of the 1997 season?",["Seattle Seahawks","Carolina Panthers","Denver Broncos","New York Giants"],2],["What position did Randall Cunningham primarily play?",["running back","defensive tackle","defensive end","quarterback"],3],["How long is an NFL regulation field, excluding end zones?",["110 yards","100 yards","120 yards","90 yards"],1],["What is the answer to this NFL receiving record: most receptions in a season through 2025?",["Michael Thomas","Cooper Kupp","Marvin Harrison","Antonio Brown"],0],["How many interceptions did Paul Krause record in his career?",["81","71","83","79"],0],["Who holds the NFL record for career passing completions through 2025?",["Drew Brees","Tom Brady","Brett Favre","Peyton Manning"],1],["What position did Tom Brady primarily play?",["defensive tackle","running back","safety","quarterback"],3],["Which NFL franchise is DeAndre Hopkins most closely associated with historically?",["Philadelphia Eagles","Houston Texans","Cincinnati Bengals","New England Patriots"],1],["How many passing touchdowns did Peyton Manning throw in 2013?",["54","49","55","50"],2],["Which team finished 0-16 in 2017?",["Detroit Lions","New York Jets","Houston Texans","Cleveland Browns"],3],["What position did Von Miller primarily play?",["linebacker","running back","defensive end","cornerback"],0],["What position did Michael Thomas primarily play?",["linebacker","tight end","wide receiver","defensive tackle"],2],["Which coach led the 1999 Rams to a Super Bowl title?",["Dick Vermeil","Mike Martz","Sean McVay","Jeff Fisher"],0],["Who was the MVP of Super Bowl LVII?",["Jalen Hurts","Travis Kelce","Patrick Mahomes","Isiah Pacheco"],2],["Which division contains the San Francisco 49ers?",["NFC East","NFC West","NFC North","AFC East"],1],["What position did George Kittle primarily play?",["defensive end","wide receiver","tight end","safety"],2],["Who holds the NFL record for single-season passing yards (2013)?",["Tom Brady","Peyton Manning","Patrick Mahomes","Drew Brees"],1],["Which player is associated with the NFL record for career rushing touchdowns?",["LaDainian Tomlinson","Marcus Allen","Adrian Peterson","Emmitt Smith"],3],["Which player is associated with the Pittsburgh Steelers and played quarterback? (Ben Roethlisberger edition)",["Ben Roethlisberger","Dallas Clark","Ray Lewis","Justin Herbert"],0],["Which quarterback threw seven touchdowns in the 2013 season opener against Baltimore?",["Drew Brees","Tom Brady","Peyton Manning","Aaron Rodgers"],2],["Draft round in which Russell Wilson was selected?",["Third","First","Fourth","Second"],0],["What was the final score of Super Bowl I?",["35-10","33-14","27-17","24-7"],0],["Which division contains the Washington Commanders?",["AFC East","NFC West","NFC East","AFC North"],2],["What position did Matt Ryan primarily play?",["quarterback","linebacker","wide receiver","defensive tackle"],0],["Who were the Super Bowl champions of the 1987 season?",["Arizona Cardinals","New York Giants","Washington Commanders","Detroit Lions"],2],["Which team won Super Bowl XLVII?",["Denver Broncos","Baltimore Ravens","New England Patriots","San Francisco 49ers"],1],["Which player is associated with the Denver Broncos and played running back? (Terrell Davis edition)",["Jim Brown","Terrell Davis","Patrick Mahomes","Charles Woodson"],1],["First NFL team to go 0-16?",["Detroit Lions","Tampa Bay Buccaneers","Houston Texans","Cleveland Browns"],0],["Which franchise was once called the Decatur Staleys?",["Detroit Lions","Arizona Cardinals","Chicago Bears","Green Bay Packers"],2],["Who was the MVP of Super Bowl LVIII?",["Travis Kelce","Brock Purdy","Patrick Mahomes","Chris Jones"],2],["Which Super Bowl was interrupted by a stadium power outage?",["Super Bowl XLVII","Super Bowl XLIX","Super Bowl XLVI","Super Bowl XLVIII"],0],["What position did Patrick Surtain II primarily play?",["tight end","cornerback","wide receiver","running back"],1],["Which division contains the New England Patriots?",["AFC East","NFC West","NFC North","NFC East"],0],["What position did Johnny Unitas primarily play?",["quarterback","safety","defensive tackle","running back"],0],["Who were the Super Bowl champions of the 1994 season?",["Cincinnati Bengals","Tampa Bay Buccaneers","Tennessee Titans","San Francisco 49ers"],3],["Who won NFL MVP in 1997 alongside Barry Sanders?",["Brett Favre","Steve Young","John Elway","Terrell Davis"],0],["Which team won Super Bowl LIV?",["Tampa Bay Buccaneers","New England Patriots","San Francisco 49ers","Kansas City Chiefs"],3],["What position did Dick Butkus primarily play?",["safety","linebacker","defensive tackle","cornerback"],1],["What position did Joe Burrow primarily play?",["quarterback","linebacker","defensive end","running back"],0],["What position did Brandon Marshall primarily play?",["wide receiver","tight end","defensive end","running back"],0],["Which player is associated with the Minnesota Vikings and played wide receiver? (Randy Moss edition)",["Brian Dawkins","Curtis Martin","Antonio Gates","Randy Moss"],3],["What position did Patrick Mahomes primarily play?",["quarterback","linebacker","defensive end","cornerback"],0],["Which player is associated with the NFL record for rushing yards in a game?",["Jamal Lewis","Walter Payton","Adrian Peterson","Corey Dillon"],2],["Which NFL franchise is Walter Payton most closely associated with historically?",["St. Louis Rams","Chicago Bears","Houston Texans","Minnesota Vikings"],1],["Which player is associated with the NFL record for first 2,000-yard rushing season?",["Eric Dickerson","O. J. Simpson","Terrell Davis","Barry Sanders"],1],["Who was the MVP of Super Bowl 50?",["Peyton Manning","Cam Newton","Von Miller","DeMarcus Ware"],2],["How many receiving touchdowns did Randy Moss catch in 2007?",["20","24","22","23"],3],["What position did Reggie White primarily play?",["defensive end","cornerback","kicker","linebacker"],0],["What position did Aaron Donald primarily play?",["defensive tackle","defensive end","running back","quarterback"],0],["Which division contains the New York Giants?",["AFC West","AFC East","NFC East","NFC West"],2],["What position did Deion Sanders primarily play?",["defensive tackle","cornerback","wide receiver","safety"],1],["Which team won Super Bowl LVIII?",["Baltimore Ravens","Detroit Lions","Kansas City Chiefs","San Francisco 49ers"],2],["Which defense was known as the Legion of Boom?",["Seattle Seahawks","Baltimore Ravens","Denver Broncos","San Francisco 49ers"],0],["What position did Troy Aikman primarily play?",["defensive tackle","tight end","kicker","quarterback"],3],["What position did Michael Irvin primarily play?",["cornerback","running back","wide receiver","defensive tackle"],2],["Which NFL franchise is known as America’s Team?",["Dallas Cowboys","Pittsburgh Steelers","New England Patriots","Green Bay Packers"],0],["Which coach led the 2021 Rams to a Super Bowl title?",["Sean McVay","Mike Martz","Jeff Fisher","Dick Vermeil"],0],["What position did Kurt Warner primarily play?",["wide receiver","quarterback","linebacker","return specialist"],1],["Who holds the NFL record for most Super Bowl starts by a quarterback through 2025?",["Patrick Mahomes","John Elway","Tom Brady","Peyton Manning"],2],["First team to play a Super Bowl in its home stadium?",["Miami Dolphins","Minnesota Vikings","Los Angeles Rams","Tampa Bay Buccaneers"],3],["Draft round in which Joe Montana was selected?",["Second","Third","First","Fifth"],1],["What position did Warren Sapp primarily play?",["running back","kicker","defensive tackle","cornerback"],2],["Most career interceptions?",["Night Train Lane","Ed Reed","Paul Krause","Rod Woodson"],2],["What position did A.J. Brown primarily play?",["tight end","defensive end","return specialist","wide receiver"],3],["Which NFL franchise is Aaron Rodgers most closely associated with historically?",["Minnesota Vikings","Las Vegas Raiders","Miami Dolphins","Green Bay Packers"],3],["What was the final score of Super Bowl LI?",["31-28","34-28","34-31","38-28"],1],["Which NFL team has a lightning bolt on its helmet?",["Denver Broncos","Los Angeles Rams","Tennessee Titans","Los Angeles Chargers"],3],["Who won NFL MVP in 2022?",["Patrick Mahomes","Jalen Hurts","Joe Burrow","Josh Allen"],0],["Who were the Super Bowl champions of the 2011 season?",["Buffalo Bills","Jacksonville Jaguars","Carolina Panthers","New York Giants"],3],["What position did T.J. Watt primarily play?",["linebacker","safety","return specialist","quarterback"],0],["First overall pick of the 1998 NFL Draft?",["Ryan Leaf","Randy Moss","Charles Woodson","Peyton Manning"],3],["Who caught the winning touchdown in Super Bowl XLII?",["Plaxico Burress","Steve Smith","Amani Toomer","David Tyree"],0],["Which NFL franchise is Barry Sanders most closely associated with historically?",["Tennessee Titans","Detroit Lions","New Orleans Saints","Oakland Raiders"],1],["Which play ended Super Bowl XLIX with an interception at the goal line?",["The Helmet Catch","The Immaculate Reception","Malcolm Butler interception","The Music City Miracle"],2],["Which coach led the 1972 Dolphins?",["John Madden","Tom Flores","Don Shula","George Allen"],2],["What position did Steve Young primarily play?",["return specialist","tight end","defensive tackle","quarterback"],3],["What position did Eric Dickerson primarily play?",["return specialist","cornerback","defensive end","running back"],3],["What position did Torry Holt primarily play?",["defensive end","wide receiver","cornerback","safety"],1],["Which NFL franchise is Hines Ward most closely associated with historically?",["Pittsburgh Steelers","New York Giants","Minnesota Vikings","San Diego Chargers"],0],["Who was the MVP of Super Bowl III?",["Johnny Unitas","Don Maynard","Joe Namath","Matt Snell"],2],["How many career receiving touchdowns did Jerry Rice finish with?",["208","156","153","197"],3],["Longest field goal through the 2025 season?",["Matt Prater","Cam Little","Tom Dempsey","Justin Tucker"],1],["Most combined points in a Super Bowl?",["75","81","65","69"],0],["Which coach is associated with the West Coast offense?",["Tom Landry","Bill Walsh","Bill Parcells","Chuck Noll"],1],["What position did Justin Jefferson primarily play?",["return specialist","wide receiver","defensive end","cornerback"],1],["What position did Dan Fouts primarily play?",["safety","kicker","defensive tackle","quarterback"],3],["What was the final score of Super Bowl III?",["16-7","20-17","24-10","17-14"],0],["What position did Devin Hester primarily play?",["return specialist","kicker","wide receiver","running back"],0],["Which player is associated with the Arizona Cardinals and played wide receiver? (Larry Fitzgerald edition)",["Larry Fitzgerald","Cam Newton","Patrick Willis","Ja'Marr Chase"],0],["Which quarterback was selected 32nd overall in the 2018 NFL Draft?",["Baker Mayfield","Josh Allen","Sam Darnold","Lamar Jackson"],3],["Which player is associated with the New York Giants and played defensive end? (Michael Strahan edition)",["Michael Strahan","Richard Sherman","Andrew Luck","Edgerrin James"],0],["Who was known as the quarterback of the Greatest Show on Turf?",["Marc Bulger","Marshall Faulk","Kurt Warner","Trent Green"],2],["Which player is associated with the NFL record for rushing touchdowns in one season?",["Shaun Alexander","Emmitt Smith","LaDainian Tomlinson","Priest Holmes"],2],["Which player was selected first overall in the 2004 NFL Draft?",["Ben Roethlisberger","Eli Manning","Philip Rivers","Larry Fitzgerald"],1],["Who caught the Philly Special touchdown pass?",["Trey Burton","Alshon Jeffery","Nick Foles","Zach Ertz"],2],["Which division contains the Pittsburgh Steelers?",["AFC South","AFC North","AFC East","NFC West"],1],["What position did Andre Johnson primarily play?",["quarterback","kicker","safety","wide receiver"],3],["Which division contains the Atlanta Falcons?",["AFC West","NFC South","NFC North","AFC South"],1],["What position did Dan Marino primarily play?",["kicker","quarterback","return specialist","linebacker"],1],["Which player is associated with the Carolina Panthers and played wide receiver? (Steve Smith Sr. edition)",["DeSean Jackson","Hines Ward","Isaac Bruce","Steve Smith Sr."],3],["What position did Jimmy Graham primarily play?",["return specialist","kicker","tight end","defensive tackle"],2],["How many career receiving yards did Jerry Rice finish with?",["22,895","19,247","20,895","17,492"],0],["Which NFL franchise is Ben Roethlisberger most closely associated with historically?",["Las Vegas Raiders","Carolina Panthers","Pittsburgh Steelers","Minnesota Vikings"],2],["What position did Cordarrelle Patterson primarily play?",["return specialist","defensive tackle","quarterback","defensive end"],0],["What is the answer to this NFL receiving record: career receiving touchdowns?",["Terrell Owens","Marvin Harrison","Randy Moss","Jerry Rice"],3],["Which team originally drafted Philip Rivers in 2004?",["Pittsburgh Steelers","Atlanta Falcons","New York Giants","San Diego Chargers"],2],["Which NFL franchise is Brett Favre most closely associated with historically?",["Baltimore Ravens","Washington Commanders","Green Bay Packers","Las Vegas Raiders"],2],["College attended by Jerry Rice?",["Jackson State","Southern","Alcorn State","Mississippi Valley State"],3],["What position did Cam Newton primarily play?",["quarterback","safety","tight end","kicker"],0],["Which franchise is associated with the Immaculate Reception?",["Pittsburgh Steelers","Oakland Raiders","Dallas Cowboys","Miami Dolphins"],0],["Which player is associated with the Miami Dolphins and played quarterback? (Dan Marino edition)",["Steve Young","Ben Roethlisberger","Joe Montana","Dan Marino"],3],["Which player is associated with the NFL record for most rushing touchdowns by a quarterback in a season?",["Jalen Hurts","Cam Newton","Josh Allen","Lamar Jackson"],2],["What position did Barry Sanders primarily play?",["defensive tackle","running back","kicker","defensive end"],1],["How many conferences does the NFL have?",["2","3","4","1"],0],["Which NFL franchise is Marvin Harrison most closely associated with historically?",["Chicago Bears","Baltimore Ravens","Indianapolis Colts","Philadelphia Eagles"],2],["Which player is associated with the New York Giants and played wide receiver? (Odell Beckham Jr. edition)",["Warren Moon","Cam Newton","Aaron Donald","Odell Beckham Jr."],3],["What position did Dez Bryant primarily play?",["defensive end","quarterback","wide receiver","cornerback"],2],["Which player was selected first overall in the 2011 NFL Draft?",["Julio Jones","Cam Newton","A. J. Green","Von Miller"],1],["What position did Fran Tarkenton primarily play?",["quarterback","safety","tight end","return specialist"],0],["Which team lost the Ice Bowl to Green Bay?",["Chicago Bears","Dallas Cowboys","New York Giants","Minnesota Vikings"],1],["What position did Earl Thomas primarily play?",["return specialist","safety","linebacker","defensive end"],1],["College attended by Travis Kelce?",["Cincinnati","Miami (Ohio)","Ohio State","Pittsburgh"],0],["Which NFL franchise is known as the Steelers?",["Los Angeles Rams","Jacksonville Jaguars","Pittsburgh Steelers","New York Jets"],2],["What is the name of the trophy awarded to the Super Bowl champion?",["Vince Lombardi Trophy","Lamar Hunt Trophy","Walter Payton Trophy","George Halas Trophy"],0],["How many career rushing yards did Emmitt Smith finish with?",["15,269","18,355","18,105","16,726"],1],["What position did Ricky Williams primarily play?",["running back","cornerback","return specialist","kicker"],0],["Most Super Bowl MVP awards?",["Bart Starr","Patrick Mahomes","Joe Montana","Tom Brady"],3],["Who caught the Immaculate Reception?",["John Stallworth","Rocky Bleier","Franco Harris","Lynn Swann"],2],["Who won NFL MVP in 1986 as a defensive player?",["Reggie White","Bruce Smith","Mike Singletary","Lawrence Taylor"],3],["How many rushing yards did Adrian Peterson gain in his record 2007 game?",["278","295","303","296"],3],["Which coach led the 2017 Eagles to a Super Bowl title?",["Chip Kelly","Nick Sirianni","Doug Pederson","Andy Reid"],2],["Most combined points in an NFL game?",["106","99","120","113"],3],["Which NFL franchise is known as the Dolphins?",["Los Angeles Rams","Green Bay Packers","Miami Dolphins","Denver Broncos"],2],["Which team won Super Bowl LVI?",["San Francisco 49ers","Los Angeles Rams","Kansas City Chiefs","Cincinnati Bengals"],1],["Which team won Super Bowl LV?",["Kansas City Chiefs","New England Patriots","Tampa Bay Buccaneers","Los Angeles Rams"],2],["Which player was selected before Patrick Mahomes in the 2017 draft?",["Deshaun Watson","Josh Allen","Mitchell Trubisky","Lamar Jackson"],2],["What position did Rob Gronkowski primarily play?",["return specialist","safety","defensive end","tight end"],3],["Which NFL franchise is known as the Ravens?",["New York Jets","New Orleans Saints","Baltimore Ravens","Carolina Panthers"],2],["Who were the Super Bowl champions of the 1998 season?",["New Orleans Saints","Indianapolis Colts","Minnesota Vikings","Denver Broncos"],3],["Which player is associated with the Dallas Cowboys and played wide receiver? (Dez Bryant edition)",["Julio Jones","Josh Allen","Dan Fouts","Dez Bryant"],3],["Who kicked the game-winning field goal in Super Bowl XXXVI?",["Stephen Gostkowski","John Kasay","Mike Vanderjagt","Adam Vinatieri"],3],["What position did Calvin Johnson primarily play?",["wide receiver","tight end","defensive tackle","safety"],0],["What position did Mean Joe Greene primarily play?",["tight end","running back","quarterback","defensive tackle"],3],["Which quarterback threw six touchdown passes in Super Bowl XXIX?",["Brett Favre","Joe Montana","Troy Aikman","Steve Young"],3],["What position did Marshawn Lynch primarily play?",["safety","running back","defensive tackle","wide receiver"],1],["What is the trophy for the NFC champion called?",["Paul Brown Trophy","Vince Lombardi Trophy","Lamar Hunt Trophy","George Halas Trophy"],3],["What position did Larry Fitzgerald primarily play?",["running back","wide receiver","safety","kicker"],1],["What is the answer to this NFL receiving record: most receiving touchdowns in a game (tied record)?",["Five","Four","Six","Seven"],0],["Which division contains the Los Angeles Rams?",["NFC North","AFC East","AFC South","NFC West"],3],["What is the answer to this NFL receiving record: single-season receiving touchdowns?",["Rob Gronkowski","Davante Adams","Randy Moss","Jerry Rice"],2],["What position did LaDainian Tomlinson primarily play?",["running back","quarterback","wide receiver","safety"],0],["Which NFL franchise is known as the Commanders?",["Washington Commanders","San Francisco 49ers","Denver Broncos","Green Bay Packers"],0],["What position did Julio Jones primarily play?",["wide receiver","running back","cornerback","return specialist"],0],["What position did Brett Favre primarily play?",["wide receiver","tight end","cornerback","quarterback"],3],["Who holds the NFL record for first 5,000-yard passing season?",["Dan Marino","Peyton Manning","Kurt Warner","Drew Brees"],0],["What was the NFL originally called when founded in 1920?",["American Professional Football Association","National Football Association","United Football League","American Football League"],0],["What position did Cooper Kupp primarily play?",["wide receiver","running back","return specialist","safety"],0],["Who returned the opening kickoff of Super Bowl XLI for a touchdown?",["Jacoby Jones","Dante Hall","Desmond Howard","Devin Hester"],3],["What position did Donovan McNabb primarily play?",["quarterback","running back","defensive end","return specialist"],0],["Most points by one team in an NFL regular-season game?",["80","70","72","76"],2],["How many rushing yards did Adrian Peterson gain in 2012?",["2,105","2,066","1,997","2,097"],3],["Who threw seven touchdown passes against the Giants in 2015?",["Tom Brady","Matt Ryan","Eli Manning","Drew Brees"],3],["Which team drafted Patrick Mahomes in 2017?",["Houston Texans","Buffalo Bills","Kansas City Chiefs","Chicago Bears"],2],["What position did Lawrence Taylor primarily play?",["wide receiver","linebacker","safety","defensive end"],1],["What position did Ndamukong Suh primarily play?",["defensive tackle","kicker","cornerback","wide receiver"],0],["How deep is each NFL end zone?",["20 yards","15 yards","5 yards","10 yards"],3],["Which player scored on the Music City Miracle?",["Frank Wycheck","Eddie George","Kevin Dyson","Derrick Mason"],2],["What position did Jalen Ramsey primarily play?",["cornerback","return specialist","defensive tackle","safety"],0],["What position did Nick Chubb primarily play?",["tight end","safety","running back","return specialist"],2],["What position did Michael Strahan primarily play?",["quarterback","linebacker","defensive end","running back"],2],["Which division contains the New York Jets?",["AFC South","AFC East","NFC South","AFC North"],1],["What position did Edgerrin James primarily play?",["cornerback","defensive end","running back","kicker"],2],["College attended by Peyton Manning?",["Tennessee","Ole Miss","Georgia","Alabama"],0],["What position did Drew Brees primarily play?",["wide receiver","quarterback","cornerback","running back"],1],["How many career sacks did Bruce Smith record?",["190","202","200","198"],2],["NFL record for most regular-season losses in a 16-game season?",["1-15","2-14","0-15","0-16"],3],["Most consecutive regular-season wins by an NFL team?",["19","25","21","23"],3],["What position did Emmitt Smith primarily play?",["running back","linebacker","defensive tackle","kicker"],0],["What position did Josh Allen primarily play?",["running back","wide receiver","quarterback","tight end"],2],["How many receiving yards did Flipper Anderson gain in his 1989 record game?",["336","329","352","312"],0],["First 63-yard field goal in NFL history?",["Jason Elam","Sebastian Janikowski","Matt Prater","Tom Dempsey"],3],["Which division contains the Houston Texans?",["NFC East","AFC South","NFC North","NFC West"],1],["What position did Peyton Manning primarily play?",["defensive end","defensive tackle","running back","quarterback"],3],["Who was the MVP of Super Bowl I?",["Bart Starr","Vince Lombardi","Max McGee","Willie Wood"],0],["What is the answer to this NFL receiving record: single-season receiving yards?",["Julio Jones","Calvin Johnson","Cooper Kupp","Jerry Rice"],1],["Who scored the first touchdown in Super Bowl history?",["Boyd Dowler","Elijah Pitts","Bart Starr","Max McGee"],3],["How many downs does an offense normally have to gain a first down?",["6","5","3","4"],3],["Which division contains the Green Bay Packers?",["NFC East","AFC North","NFC North","AFC East"],2],["What position did John Elway primarily play?",["tight end","quarterback","running back","defensive end"],1],["Who holds the NFL record for career passing attempts through 2025?",["Brett Favre","Drew Brees","Peyton Manning","Tom Brady"],3],["How many sacks did T. J. Watt record in 2021?",["23.5","21","22.5","20.5"],2],["How many NFL divisions are there?",["10","8","6","4"],1],["What position did Derrick Henry primarily play?",["tight end","defensive end","return specialist","running back"],3],["Who holds the NFL record for career passing yards through 2025?",["Peyton Manning","Brett Favre","Tom Brady","Drew Brees"],2],["What position did Luke Kuechly primarily play?",["linebacker","defensive tackle","quarterback","return specialist"],0],["Which division contains the Tampa Bay Buccaneers?",["AFC East","NFC East","NFC North","NFC South"],3],["College attended by Aaron Rodgers?",["Stanford","USC","California","UCLA"],2],["Which team is associated with the Dawg Pound?",["New York Jets","Buffalo Bills","Detroit Lions","Cleveland Browns"],3],["What position did DeAndre Hopkins primarily play?",["wide receiver","kicker","defensive end","tight end"],0],["Which NFL franchise is Chris Godwin most closely associated with historically?",["Los Angeles Chargers","Philadelphia Eagles","Tampa Bay Buccaneers","Cleveland Browns"],2],["What position did Mike Ditka primarily play?",["wide receiver","quarterback","kicker","tight end"],3],["Which division contains the Buffalo Bills?",["AFC East","AFC West","NFC North","NFC South"],0],["How many points is a touchdown worth before the conversion?",["7","8","5","6"],3],["First Super Bowl to go to overtime?",["Super Bowl LI","Super Bowl LVIII","Super Bowl XXV","Super Bowl XLIX"],0],["What was the final score of Super Bowl LIX?",["35-10","31-17","38-35","40-22"],3],["College attended by Rob Gronkowski?",["UCLA","Arizona State","Arizona","Oregon"],2],["What was the final score of Super Bowl XLII?",["24-21","20-17","17-14","21-17"],2],["What position did Eli Manning primarily play?",["quarterback","tight end","defensive end","cornerback"],0],["Who holds the NFL record for career touchdown passes through 2025?",["Peyton Manning","Drew Brees","Tom Brady","Aaron Rodgers"],2],["Which player is associated with the Carolina Panthers and played linebacker? (Luke Kuechly edition)",["Harrison Smith","Luke Kuechly","Ja'Marr Chase","Brandon Marshall"],1],["College attended by Josh Allen?",["Colorado State","Wyoming","Utah State","Boise State"],1],["Which player was selected first overall in the 2016 NFL Draft?",["Joey Bosa","Carson Wentz","Dak Prescott","Jared Goff"],3],["What position did Ben Roethlisberger primarily play?",["quarterback","defensive tackle","kicker","defensive end"],0],["Which NFL franchise is Tony Romo most closely associated with historically?",["Dallas Cowboys","Tennessee Titans","Arizona Cardinals","New Orleans Saints"],0],["Which player is associated with the Philadelphia Eagles and played wide receiver? (DeSean Jackson edition)",["Charles Woodson","DeSean Jackson","Terrell Owens","Frank Gore"],1],["What position did Harrison Smith primarily play?",["safety","kicker","wide receiver","defensive end"],0],["What position did Mike Evans primarily play?",["safety","wide receiver","linebacker","cornerback"],1],["What position did Jerome Bettis primarily play?",["return specialist","running back","linebacker","defensive tackle"],1],["Most points scored by one team in a Super Bowl?",["55","63","52","49"],0],["Who holds the NFL record for touchdown passes in one game (tied record)?",["Eight","Six","Nine","Seven"],3],["What position did Tony Romo primarily play?",["defensive tackle","defensive end","quarterback","wide receiver"],2],["Who was the MVP of Super Bowl XXXVII?",["Derrick Brooks","Dexter Jackson","Brad Johnson","Warren Sapp"],1],["Which division contains the Miami Dolphins?",["NFC East","AFC East","NFC South","AFC West"],1],["How many rushing touchdowns did LaDainian Tomlinson score in 2006?",["28","25","30","27"],0],["Which division contains the Philadelphia Eagles?",["NFC West","AFC West","NFC East","AFC East"],2],["Which coach led the Packers to victory in Super Bowls I and II?",["Curly Lambeau","Bart Starr","Mike Holmgren","Vince Lombardi"],3],["Which coach led the 1985 Bears?",["Mike Singletary","George Halas","Mike Ditka","Buddy Ryan"],2],["What is the answer to this NFL receiving record: most receiving yards in one game?",["Jerry Rice","Flipper Anderson","Calvin Johnson","Stephone Paige"],1],["What position did Champ Bailey primarily play?",["cornerback","return specialist","safety","defensive end"],0],["Which NFL franchise is Demaryius Thomas most closely associated with historically?",["Denver Broncos","Chicago Bears","New York Jets","St. Louis Rams"],0],["Who were the Super Bowl champions of the 1984 season?",["New England Patriots","Las Vegas Raiders","Tampa Bay Buccaneers","San Francisco 49ers"],3],["What position did Michael Vick primarily play?",["wide receiver","linebacker","defensive tackle","quarterback"],3],["Draft round in which Brock Purdy was selected?",["Seventh","Fifth","Fourth","Sixth"],0],["First Black quarterback to start and win a Super Bowl?",["Patrick Mahomes","Doug Williams","Steve McNair","Russell Wilson"],1],["Which player is associated with the NFL record for most career rushing yards by a quarterback through 2025?",["Lamar Jackson","Russell Wilson","Cam Newton","Michael Vick"],0],["Longest kickoff return in Super Bowl history?",["Devin Hester","Percy Harvin","Jacoby Jones","Desmond Howard"],2],["How many consecutive Super Bowls did the Bills lose in the early 1990s?",["4","3","2","5"],0],["Which team went 16-0 in the 2007 regular season?",["Indianapolis Colts","New York Giants","New England Patriots","Green Bay Packers"],2],["First overall pick of the 2020 NFL Draft?",["Joe Burrow","Tua Tagovailoa","Justin Herbert","Chase Young"],0],["What position did Philip Rivers primarily play?",["defensive end","defensive tackle","kicker","quarterback"],3],["What position did Stephen Gostkowski primarily play?",["defensive end","tight end","kicker","defensive tackle"],2],["Which defense was nicknamed the Purple People Eaters?",["Baltimore Ravens","Los Angeles Rams","Minnesota Vikings","Chicago Bears"],2],["What position did Aaron Rodgers primarily play?",["linebacker","return specialist","quarterback","kicker"],2],["Which team originally drafted Eli Manning in 2004?",["New York Giants","Oakland Raiders","San Diego Chargers","Indianapolis Colts"],2],["What position did Sebastian Janikowski primarily play?",["defensive end","kicker","return specialist","defensive tackle"],1],["Who was the MVP of Super Bowl LIX?",["Saquon Barkley","Patrick Mahomes","Jalen Hurts","Cooper DeJean"],2],["What position did Jim Kelly primarily play?",["cornerback","quarterback","return specialist","tight end"],1],["Which player is associated with the Atlanta Falcons and played wide receiver? (Roddy White edition)",["John Elway","Adrian Peterson","Roddy White","Lamar Jackson"],2],["Who was the MVP of Super Bowl XXX?",["Troy Aikman","Larry Brown","Deion Sanders","Emmitt Smith"],1],["Which NFL franchise is Joe Namath most closely associated with historically?",["New York Jets","Jacksonville Jaguars","Houston Oilers","San Diego Chargers"],0],["What position did Walter Payton primarily play?",["wide receiver","safety","running back","linebacker"],2],["First overall pick of the 2024 NFL Draft?",["Michael Penix Jr.","Caleb Williams","Jayden Daniels","Drake Maye"],1],["How many passing yards did Peyton Manning throw in 2013?",["5,477","5,476","5,316","5,208"],0],["What position did Dak Prescott primarily play?",["quarterback","cornerback","kicker","defensive end"],0],["Which defensive unit was nicknamed the Steel Curtain?",["1985 Chicago Bears","2000 Baltimore Ravens","1970s Pittsburgh Steelers","2013 Seattle Seahawks"],2],["What was the final score of Super Bowl XX?",["55-10","46-10","35-17","42-10"],1],["What position did Lynn Swann primarily play?",["linebacker","wide receiver","kicker","defensive end"],1],["What position did Terrell Davis primarily play?",["quarterback","safety","tight end","running back"],3],["Which division contains the Cleveland Browns?",["AFC North","NFC West","NFC East","AFC East"],0],["What position did J.J. Watt primarily play?",["cornerback","defensive end","safety","linebacker"],1],["What position did Le'Veon Bell primarily play?",["running back","defensive tackle","return specialist","cornerback"],0],["Which team won Super Bowl LI after trailing 28-3?",["Denver Broncos","Philadelphia Eagles","Atlanta Falcons","New England Patriots"],3],["What is the answer to this NFL receiving record: most catches in a single game?",["Brandon Marshall","Michael Thomas","Jerry Rice","Keenan Allen"],0],["Which team beat the Bills in four consecutive Super Bowls from 1990 through 1993?",["New York Giants","No single team","Washington Redskins","Dallas Cowboys"],1],["Who won the first Heisman Trophy and later played pro football?",["He played for the Bears","He played for the Giants","Jay Berwanger did not play in the NFL","He played for the Packers"],2],["What is the standard NFL play clock after most plays?",["45 seconds","25 seconds","40 seconds","30 seconds"],2],["Which player is associated with the Denver Broncos and played wide receiver? (Demaryius Thomas edition)",["Peyton Manning","Devin Hester","Demaryius Thomas","Charles Woodson"],2],["Who threw the Philly Special touchdown pass?",["Zach Ertz","Trey Burton","Nick Foles","Carson Wentz"],1],["What is the answer to this NFL receiving record: career receptions?",["Tony Gonzalez","Jerry Rice","Larry Fitzgerald","Jason Witten"],1],["How many teams are in each NFL division?",["6","5","3","4"],3],["What position did Priest Holmes primarily play?",["kicker","return specialist","running back","wide receiver"],2],["Which NFL franchise is known as the Eagles?",["Seattle Seahawks","Baltimore Ravens","Houston Texans","Philadelphia Eagles"],3],["What position did Charles Woodson primarily play?",["quarterback","tight end","cornerback","return specialist"],2],["What position did Shannon Sharpe primarily play?",["tight end","defensive tackle","running back","defensive end"],0],["Which NFL franchise is Patrick Mahomes most closely associated with historically?",["San Diego Chargers","Green Bay Packers","New Orleans Saints","Kansas City Chiefs"],3],["Which franchise lost four straight Super Bowls in the early 1990s?",["Minnesota Vikings","Cincinnati Bengals","Denver Broncos","Buffalo Bills"],3],["Which player is associated with the San Diego Chargers and played quarterback? (Dan Fouts edition)",["Dan Fouts","T.J. Watt","Priest Holmes","Matthew Stafford"],0],["How many passing touchdowns did Dan Marino throw in 1984?",["46","44","50","48"],3],["What position did Joe Montana primarily play?",["quarterback","cornerback","running back","return specialist"],0],["Which player is associated with the Atlanta Falcons and played quarterback? (Michael Vick edition)",["Dick Butkus","Michael Vick","Derrick Henry","Le'Veon Bell"],1],["What position did Saquon Barkley primarily play?",["defensive tackle","defensive end","running back","cornerback"],2],["Which division contains the Detroit Lions?",["AFC West","NFC North","AFC South","AFC East"],1],["College attended by Walter Payton?",["Jackson State","Alcorn State","Mississippi Valley State","Southern"],0],["What position did Adam Vinatieri primarily play?",["tight end","cornerback","wide receiver","kicker"],3],["Which division contains the Denver Broncos?",["AFC East","NFC West","AFC West","NFC East"],2],["What is the answer to this NFL receiving record: most receiving yards in a season by a tight end through 2025?",["George Kittle","Tony Gonzalez","Travis Kelce","Rob Gronkowski"],2],["Which division contains the Seattle Seahawks?",["NFC West","NFC South","AFC North","NFC North"],0],["What position did Travis Kelce primarily play?",["tight end","kicker","defensive end","running back"],0],["Which player is associated with the Oakland Raiders and played kicker? (Sebastian Janikowski edition)",["John Randle","Sebastian Janikowski","Demaryius Thomas","John Elway"],1],["Which team beat the undefeated 2007 Patriots in Super Bowl XLII?",["Pittsburgh Steelers","Green Bay Packers","New York Giants","Philadelphia Eagles"],2],["What position did Tim Brown primarily play?",["running back","defensive tackle","kicker","wide receiver"],3],["Which team lost the 28-3 lead in Super Bowl LI?",["New England Patriots","Seattle Seahawks","Carolina Panthers","Atlanta Falcons"],3],["Which franchise moved from Houston to Tennessee?",["Titans","Jaguars","Texans","Colts"],0],["Which franchise is associated with the Terrible Towel?",["Baltimore Ravens","Pittsburgh Steelers","Cleveland Browns","Cincinnati Bengals"],1],["College attended by Drew Brees?",["Purdue","Michigan State","Northwestern","Indiana"],0],["Which NFL team was named after a poem by Edgar Allan Poe?",["Philadelphia Eagles","Atlanta Falcons","Arizona Cardinals","Baltimore Ravens"],3],["What position did Alvin Kamara primarily play?",["defensive end","kicker","running back","return specialist"],2],["How many rushing yards did O. J. Simpson gain in 1973?",["2,003","1,883","2,105","2,097"],0],["Which NFL franchise is Josh Allen most closely associated with historically?",["Denver Broncos","Buffalo Bills","Minnesota Vikings","Cleveland Browns"],1],["Which player is associated with the New York Jets and played quarterback? (Joe Namath edition)",["Joe Namath","Bart Starr","T.J. Watt","Mike Evans"],0],["First Super Bowl champion?",["Green Bay Packers","Kansas City Chiefs","Dallas Cowboys","New York Jets"],0],["Who were the Super Bowl champions of the 2022 season?",["Dallas Cowboys","Cleveland Browns","Atlanta Falcons","Kansas City Chiefs"],3],["What position did Isaac Bruce primarily play?",["defensive tackle","cornerback","tight end","wide receiver"],3],["Which team won Super Bowl LVII?",["San Francisco 49ers","Kansas City Chiefs","Philadelphia Eagles","Cincinnati Bengals"],1],["Which division contains the Las Vegas Raiders?",["NFC East","NFC West","NFC North","AFC West"],3],["Which team lost Super Bowl XLI despite returning the opening kickoff for a touchdown?",["Chicago Bears","Seattle Seahawks","Indianapolis Colts","Carolina Panthers"],0],["What position did Justin Herbert primarily play?",["quarterback","tight end","defensive end","cornerback"],0],["Which player is associated with the NFL record for most rushing yards by a quarterback in a season through 2025?",["Cam Newton","Lamar Jackson","Michael Vick","Justin Fields"],1],["What is the answer to this NFL receiving record: most career receiving yards by a tight end through 2025?",["Tony Gonzalez","Travis Kelce","Rob Gronkowski","Jason Witten"],0],["What position did Brian Urlacher primarily play?",["kicker","linebacker","defensive tackle","running back"],1],["Which receiver made the Helmet Catch in Super Bowl XLII?",["Victor Cruz","Plaxico Burress","Mario Manningham","David Tyree"],3],["What position did Russell Wilson primarily play?",["kicker","quarterback","wide receiver","linebacker"],1],["Which two franchises began play in 1995?",["Ravens and Browns","Texans and Titans","Seahawks and Buccaneers","Panthers and Jaguars"],3],["Which division contains the Jacksonville Jaguars?",["NFC South","NFC West","NFC North","AFC South"],3],["What position did Jared Goff primarily play?",["quarterback","defensive end","running back","kicker"],0],["What position did Myles Garrett primarily play?",["quarterback","defensive end","kicker","linebacker"],1],["Which team won Super Bowl LIX?",["Philadelphia Eagles","Washington Commanders","Buffalo Bills","Kansas City Chiefs"],0],["Which division contains the Dallas Cowboys?",["NFC East","AFC South","AFC West","NFC West"],0],["Most interceptions in one season?",["Paul Krause","Dick LeBeau","Ed Reed","Night Train Lane"],3],["Which coach won six Super Bowls as Patriots head coach?",["Bill Belichick","Chuck Noll","Andy Reid","Bill Walsh"],0],["Most wins by an NFL head coach (regular season)?",["George Halas","Andy Reid","Don Shula","Bill Belichick"],2],["What position did Ed Reed primarily play?",["linebacker","wide receiver","cornerback","safety"],3],["How many passing touchdowns did Tom Brady throw in 2007?",["50","49","55","48"],0],["Which division contains the Baltimore Ravens?",["NFC South","AFC South","NFC East","AFC North"],3],["Which player is associated with the NFL record for most consecutive 1,000-yard rushing seasons?",["Frank Gore","Barry Sanders","Emmitt Smith","Curtis Martin"],2],["What position did Antonio Brown primarily play?",["safety","tight end","wide receiver","defensive tackle"],2],["Which team did the 1985 Bears defeat in Super Bowl XX?",["Denver Broncos","Los Angeles Raiders","New England Patriots","Miami Dolphins"],2],["What position did Roddy White primarily play?",["wide receiver","linebacker","kicker","defensive end"],0],["Which city is home to the Pro Football Hall of Fame?",["Pittsburgh, Pennsylvania","Cleveland, Ohio","Green Bay, Wisconsin","Canton, Ohio"],3],["Which division contains the Chicago Bears?",["AFC East","NFC North","NFC East","NFC West"],1],["Which franchise began as the Cleveland Browns before moving to Baltimore in 1996?",["Indianapolis Colts","Baltimore Ravens","Cincinnati Bengals","Tennessee Titans"],1],["Only perfect 17-0 season?",["2007 New England Patriots","1972 Miami Dolphins","1978 Pittsburgh Steelers","1985 Chicago Bears"],1],["Which head coach led the Steelers to four Super Bowl titles in the 1970s?",["Bill Cowher","Mike Tomlin","Don Shula","Chuck Noll"],3],["Which player is associated with the New Orleans Saints and played quarterback? (Drew Brees edition)",["Aaron Donald","Drew Brees","Marshall Faulk","Mike Ditka"],1],["Who were the Super Bowl champions of the 2023 season?",["Kansas City Chiefs","San Francisco 49ers","New York Jets","New England Patriots"],0],["In what year was the first Super Bowl played?",["1965","1967","1966","1970"],1],["What position did John Stallworth primarily play?",["quarterback","tight end","cornerback","wide receiver"],3],["Which team won Super Bowl III after Joe Namath guaranteed victory?",["New York Jets","Baltimore Colts","Kansas City Chiefs","Oakland Raiders"],0],["College attended by Patrick Mahomes?",["Oklahoma","Texas Tech","Texas A&M","Texas"],1],["Which NFL franchise is Steve Smith Sr. most closely associated with historically?",["Los Angeles Chargers","Carolina Panthers","Washington Commanders","Dallas Cowboys"],1],["Which Ohio city hosted the 1920 meeting that founded the APFA?",["Canton","Columbus","Cleveland","Akron"],0],["Which NFL franchise is Tyreek Hill most closely associated with historically?",["Green Bay Packers","Kansas City Chiefs","Oakland Raiders","Miami Dolphins"],1],["What position did Ray Lewis primarily play?",["wide receiver","linebacker","cornerback","safety"],1],["College attended by Lamar Jackson?",["Kentucky","Florida State","Clemson","Louisville"],3],["What position did Jerry Rice primarily play?",["safety","defensive end","wide receiver","defensive tackle"],2],["Which division contains the Los Angeles Chargers?",["AFC South","AFC West","NFC West","NFC North"],1],["Who holds the NFL record for single-season touchdown passes (2013)?",["Peyton Manning","Tom Brady","Aaron Rodgers","Dan Marino"],0],["Which NFL franchise is Cooper Kupp most closely associated with historically?",["Indianapolis Colts","Las Vegas Raiders","Chicago Bears","Los Angeles Rams"],3],["What position did Ja'Marr Chase primarily play?",["tight end","linebacker","wide receiver","cornerback"],2],["Which team won Super Bowl XLV?",["Pittsburgh Steelers","New England Patriots","New Orleans Saints","Green Bay Packers"],3],["What position did Jamaal Charles primarily play?",["defensive end","safety","running back","kicker"],2],["Which player was selected first overall in the 2022 NFL Draft?",["Aidan Hutchinson","Kayvon Thibodeaux","Sauce Gardner","Travon Walker"],3],["Which quarterback led the 1999 Rams to a Super Bowl title?",["Tony Banks","Trent Green","Marc Bulger","Kurt Warner"],3],["Who won NFL MVP in 2024?",["Josh Allen","Joe Burrow","Saquon Barkley","Lamar Jackson"],0],["Which player is associated with the Denver Broncos and played cornerback? (Champ Bailey edition)",["Roddy White","Patrick Mahomes","John Randle","Champ Bailey"],3],["What position did Lamar Jackson primarily play?",["kicker","quarterback","wide receiver","defensive tackle"],1],["What position did Roger Staubach primarily play?",["quarterback","cornerback","defensive end","tight end"],0],["What position did Anquan Boldin primarily play?",["return specialist","linebacker","running back","wide receiver"],3],["Who completed the lateral that started the Music City Miracle?",["Frank Wycheck","Eddie George","Kevin Dyson","Steve McNair"],0],["What position did Davante Adams primarily play?",["tight end","wide receiver","kicker","defensive tackle"],1],["Who holds the NFL record for most NFL MVP awards through 2025?",["Tom Brady","Peyton Manning","Brett Favre","Aaron Rodgers"],1],["What position did Justin Tucker primarily play?",["kicker","wide receiver","defensive tackle","linebacker"],0],["What was the final score of Super Bowl LII?",["37-31","41-33","38-35","34-28"],1],["Which team executed the Philly Special in Super Bowl LII?",["New England Patriots","Philadelphia Eagles","New York Giants","Kansas City Chiefs"],1],["Which team won the first Super Bowl played in overtime?",["Los Angeles Rams","Atlanta Falcons","New England Patriots","Kansas City Chiefs"],2],["Most career Super Bowl wins as a player?",["Terry Bradshaw","Joe Montana","Charles Haley","Tom Brady"],3],["Which player is associated with the NFL record for career rushing yards?",["Frank Gore","Barry Sanders","Emmitt Smith","Walter Payton"],2],["Which player is associated with the NFL record for single-season rushing yards?",["Barry Sanders","Jamal Lewis","Adrian Peterson","Eric Dickerson"],3],["Which player was selected first overall in the 1983 NFL Draft?",["Dan Marino","Jim Kelly","John Elway","Eric Dickerson"],2],["What position did Ezekiel Elliott primarily play?",["running back","return specialist","wide receiver","kicker"],0],["Most career field goals made through 2025?",["Gary Anderson","Jason Hanson","Adam Vinatieri","Morten Andersen"],2],["What position did Demaryius Thomas primarily play?",["wide receiver","cornerback","kicker","return specialist"],0],["Which player is associated with the New England Patriots and played quarterback? (Tom Brady edition)",["Brian Urlacher","T.J. Watt","Tom Brady","Peyton Manning"],2],["Who were the Super Bowl champions of the 1999 season?",["Los Angeles Rams","Cleveland Browns","New York Giants","Tennessee Titans"],0],["What position did Jim Brown primarily play?",["return specialist","defensive tackle","running back","defensive end"],2],["First AFL team to win a Super Bowl?",["Oakland Raiders","Kansas City Chiefs","Buffalo Bills","New York Jets"],3],["What position did John Randle primarily play?",["defensive tackle","return specialist","running back","cornerback"],0],["First overall pick of the 2021 NFL Draft?",["Zach Wilson","Trevor Lawrence","Justin Fields","Trey Lance"],1],["Which linebacker stopped Kevin Dyson short of the goal line in Super Bowl XXXIV?",["Ray Lewis","Kevin Carter","London Fletcher","Mike Jones"],3],["Who was the MVP of Super Bowl XX?",["Richard Dent","Walter Payton","Mike Singletary","Jim McMahon"],0],["Which team did the Saints defeat for their first Super Bowl title?",["Chicago Bears","Indianapolis Colts","Minnesota Vikings","New England Patriots"],1],["Which division contains the Arizona Cardinals?",["AFC East","AFC North","NFC West","NFC North"],2],["Who holds the NFL record for first quarterback to pass for 4,000 yards in a season?",["Joe Namath","Johnny Unitas","Fran Tarkenton","Dan Fouts"],0],["First Black head coach to win a Super Bowl?",["Dennis Green","Lovie Smith","Mike Tomlin","Tony Dungy"],3],["What position did Terry Bradshaw primarily play?",["return specialist","quarterback","running back","wide receiver"],1]];
+/* ============================================================
+   FOURTH AND LONG — toolkit
+   A 480x270 board instead of the 320x180 the action games use.
+   This one is read rather than played, and a 112-character
+   question needs the extra room.
+   ============================================================ */
+var CV, X, W = 480, H = 270;
+
+/* a seeded stream, so a crowd or a shuffle stays put between frames */
+function hash32(n) {
+  n = (n ^ 61) ^ (n >>> 16); n = (n + (n << 3)) >>> 0;
+  n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d) >>> 0;
+  return (n ^ (n >>> 15)) >>> 0;
+}
+function rnd(seed) { return hash32(seed >>> 0) / 4294967296; }
+
+/* splitmix32: a single xorshift round leaves sequential seeds
+   visibly correlated, which once made a whole game deterministic */
+function mix32(s) {
+  s = (s + 0x9e3779b9) >>> 0;
+  var z = s;
+  z = Math.imul(z ^ (z >>> 16), 0x21f0aaad) >>> 0;
+  z = Math.imul(z ^ (z >>> 15), 0x735a2d97) >>> 0;
+  return ((z ^ (z >>> 15)) >>> 0) / 4294967296;
+}
+
+function pxc(ctx, x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
+
+/* ---------------- the alphabet ----------------
+   5x7 cells. Everything is drawn upper case: a stadium board has
+   no lower case either, and it halves the glyph count. The bank
+   needs exactly these 46 characters and no others. */
+var GLYPH = {
+  A: '01110100011000111111100011000110001', B: '11110100011000111110100011000111110',
+  C: '01110100011000010000100001000101110', D: '11110100011000110001100011000111110',
+  E: '11111100001000011110100001000011111', F: '11111100001000011110100001000010000',
+  G: '01110100011000010111100011000101111', H: '10001100011000111111100011000110001',
+  I: '11111001000010000100001000010011111', J: '00111000100001000010000101001001100',
+  K: '10001100101010011000101001001010001', L: '10000100001000010000100001000011111',
+  M: '10001110111010110101100011000110001', N: '10001110011010110011100011000110001',
+  O: '01110100011000110001100011000101110', P: '11110100011000111110100001000010000',
+  Q: '01110100011000110001101011001001101', R: '11110100011000111110101001001010001',
+  S: '01111100001000001110000010000111110', T: '11111001000010000100001000010000100',
+  U: '10001100011000110001100011000101110', V: '10001100011000110001100010101000100',
+  W: '10001100011000110101101011101110001', X: '10001100010101000100010101000110001',
+  Y: '10001100010101000100001000010000100', Z: '11111000010001000100010001000011111',
+  0: '01110100011001110101110011000101110', 1: '00100011000010000100001000010001110',
+  2: '01110100010000100110010001000011111', 3: '11111000100010000010000011000101110',
+  4: '00010001100101010010111110001000010', 5: '11111100001111000001000011000101110',
+  6: '00110010001000011110100011000101110', 7: '11111000010001000100001000010000100',
+  8: '01110100011000101110100011000101110', 9: '01110100011000101111000010001001100',
+  '?': '01110100010000100110001000000000100',
+  '!': '00100001000010000100001000000000100',
+  '.': '00000000000000000000000000110001100',
+  ',': '00000000000000000000001100011000100',
+  '-': '00000000000000011111000000000000000',
+  "'": '01100011000010000000000000000000000',
+  ':': '00000011000110000000011000110000000',
+  '(': '00010001000100001000010000010000010',
+  ')': '01000001000001000010000100010001000',
+  '/': '00001000100010001000100010001000000',
+  '&': '01100100101001001100101011001001101',
+  '%': '11001110010001000100010001001110011',
+  '+': '00000001000010011111001000010000000',
+  '"': '10101101010000000000000000000000000',
+  ' ': '00000000000000000000000000000000000',
+};
+/* the bank uses a curly apostrophe in a few places */
+function normalize(s) {
+  return String(s).toUpperCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/[–—]/g, '-');
+}
+
+var TRACK = 1;                                  /* pixels between glyphs */
+function charW(sc) { return (5 + TRACK) * sc; }
+function textWidth(s, sc) {
+  sc = sc || 1;
+  var n = normalize(s).length;
+  return n * charW(sc) - TRACK * sc;
+}
+function textAt(s, x, y, col, sc, ctx) {
+  sc = sc || 1;
+  var c = ctx || X, str = normalize(s), cx = x;
+  c.fillStyle = col;
+  for (var i = 0; i < str.length; i++) {
+    var g = GLYPH[str.charAt(i)];
+    if (g) {
+      for (var r = 0; r < 7; r++) {
+        for (var k = 0; k < 5; k++) {
+          if (g.charAt(r * 5 + k) === '1') c.fillRect(x + (cx - x) + k * sc, y + r * sc, sc, sc);
+        }
+      }
+    }
+    cx += charW(sc);
+  }
+  return cx - x - TRACK * sc;
+}
+function textCenter(s, cx, y, col, sc, ctx) {
+  return textAt(s, Math.round(cx - textWidth(s, sc) / 2), y, col, sc, ctx);
+}
+function textShadow(s, x, y, col, sh, sc, ctx) {
+  textAt(s, x + sc, y + sc, sh, sc, ctx);
+  return textAt(s, x, y, col, sc, ctx);
+}
+function textCenterShadow(s, cx, y, col, sh, sc, ctx) {
+  var x = Math.round(cx - textWidth(s, sc) / 2);
+  textAt(s, x + sc, y + sc, sh, sc, ctx);
+  return textAt(s, x, y, col, sc, ctx);
+}
+
+/* ---------------- wrapping ----------------
+   Breaks on spaces. A single word longer than the line is cut rather
+   than allowed to run off the board, which only happens on a couple
+   of the longer surnames at large scale. */
+function wrapText(s, maxPx, sc) {
+  sc = sc || 1;
+  var words = normalize(s).split(' ');
+  var lines = [], line = '';
+  for (var i = 0; i < words.length; i++) {
+    var word = words[i];
+    var attempt = line ? line + ' ' + word : word;
+    if (textWidth(attempt, sc) <= maxPx) { line = attempt; continue; }
+    if (line) { lines.push(line); line = ''; }
+    while (textWidth(word, sc) > maxPx) {
+      var cut = Math.max(1, Math.floor(maxPx / charW(sc)) - 1);
+      lines.push(word.slice(0, cut) + '-');
+      word = word.slice(cut);
+    }
+    line = word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/* the smallest scale at which the text still fits the box, so a short
+   question is shown big and a long one shrinks to fit rather than
+   spilling off the bottom of the board */
+function fitLines(s, maxPx, maxLines, scales) {
+  for (var i = 0; i < scales.length; i++) {
+    var lines = wrapText(s, maxPx, scales[i]);
+    if (lines.length <= maxLines) return { lines: lines, sc: scales[i] };
+  }
+  var sc = scales[scales.length - 1];
+  return { lines: wrapText(s, maxPx, sc).slice(0, maxLines), sc: sc };
+}
+
+/* ---------------- sprites ---------------- */
+function drawSprite(rows, x, y, pal, flip, scale, ctx) {
+  var c = ctx || X;
+  scale = scale || 1;
+  var h = rows.length, w = rows[0].length;
+  for (var r = 0; r < h; r++) {
+    for (var i = 0; i < w; i++) {
+      var col = pal[rows[r].charAt(flip ? w - 1 - i : i)];
+      if (!col) continue;
+      c.fillStyle = col;
+      c.fillRect((x | 0) + i * scale, (y | 0) + r * scale, scale, scale);
+    }
+  }
+}
+
+/* ---------------- colours ---------------- */
+var TURF = '#1f5c2e', TURF_D = '#17431f', CHALK = '#e9f0f7';
+var BOARD = '#0a0f1a', BOARD_L = '#141d2f';
+var AMBER = '#ffbe2e', GREEN = '#4ade6a', RED = '#ef5a5a', STEEL = '#8fa3c4';
+/* ============================================================
+   FOURTH AND LONG — the stadium and the board
+   The board does the work, so the stadium is a frame around it:
+   a strip of crowd above, a strip of turf below, and the big
+   screen filling everything between.
+   ============================================================ */
+
+var BOARD_X = 14, BOARD_Y = 36, BOARD_W = W - 28, BOARD_H = 196;
+
+/* ---------------- crowd ---------------- */
+/* Rows of heads, not noise. A field of random bright pixels reads as
+   television static rather than as people. `lift` brightens the whole
+   stand when something has just happened. */
+function drawCrowd(y0, y1, seed, lift) {
+  pxc(X, 0, y0, W, y1 - y0, '#0b1320');
+  for (var row = 0, yy = y0 + 1; yy < y1 - 1; yy += 3, row++) {
+    var off = row % 2 ? 2 : 0;
+    for (var xx = off; xx < W; xx += 4) {
+      var r = rnd(seed + xx * 7919 + yy * 104729);
+      if (r < 0.22) continue;
+      var t = rnd(seed + xx * 31 + yy * 17);
+      var col = t > 0.90 ? '#d8c07a' : t > 0.70 ? '#6b7fa4' : t > 0.42 ? '#46587c' : '#2d3b58';
+      if (lift > 0 && rnd(seed + xx * 13 + yy * 7 + ((Date.now() / 90) | 0)) < lift) col = '#f2e6b8';
+      pxc(X, xx, yy, 2, 2, col);
+    }
+    pxc(X, 0, yy + 2, W, 1, 'rgba(0,0,0,0.26)');
+  }
+}
+
+/* ---------------- floodlights ---------------- */
+function drawLights() {
+  for (var i = 0; i < 2; i++) {
+    var lx = i ? W - 54 : 34;
+    pxc(X, lx - 1, 4, 2, 14, '#4a5b7e');
+    pxc(X, lx - 11, 0, 22, 7, '#67799c');
+    for (var b = 0; b < 5; b++) pxc(X, lx - 9 + b * 4, 1, 3, 4, '#fff3c4');
+    X.globalAlpha = 0.055;
+    X.fillStyle = '#ffeaa0';
+    X.beginPath();
+    X.moveTo(lx, 7); X.lineTo(lx - 86, 70); X.lineTo(lx + 86, 70);
+    X.closePath(); X.fill();
+    X.globalAlpha = 1;
+  }
+}
+
+/* ---------------- turf ---------------- */
+function drawTurf(y0, h) {
+  for (var i = 0; i < h; i++) {
+    var t = i / h;
+    pxc(X, 0, y0 + i, W, 1, (Math.floor(t * 5) % 2) ? '#1c5429' : '#216232');
+  }
+  /* yard lines running away from the camera */
+  for (var k = 0; k <= 9; k++) {
+    var x = Math.round(k * (W / 9));
+    pxc(X, x, y0, 1, h, 'rgba(233,240,247,0.30)');
+  }
+  pxc(X, 0, y0, W, 1, 'rgba(255,255,255,0.35)');
+  pxc(X, 0, y0 + 1, W, 1, 'rgba(0,0,0,0.25)');
+}
+
+/* ---------------- the board itself ---------------- */
+/* `flash` tints the whole screen: green when a question is right,
+   red when it is wrong. `bulb` drives the chase lights round the rim. */
+function drawBoard(t, flash, bulb) {
+  var x = BOARD_X, y = BOARD_Y, w = BOARD_W, h = BOARD_H;
+
+  /* the gantry holding it up */
+  pxc(X, x + 24, y - 10, 5, 12, '#3b485f');
+  pxc(X, x + w - 29, y - 10, 5, 12, '#3b485f');
+
+  /* steel surround */
+  pxc(X, x - 6, y - 6, w + 12, h + 12, '#2b3650');
+  pxc(X, x - 6, y - 6, w + 12, 2, '#55657f');
+  pxc(X, x - 6, y + h + 4, w + 12, 2, '#161e2e');
+
+  /* the bulbs chasing round the rim */
+  var step = 10, i = 0;
+  function bulbAt(bx, by) {
+    var on = ((i++ + bulb) % 4) === 0;
+    pxc(X, bx, by, 3, 3, on ? '#ffe9a8' : '#4b566e');
+  }
+  for (var bx = x - 4; bx < x + w + 2; bx += step) { bulbAt(bx, y - 5); bulbAt(bx, y + h + 2); }
+  for (var by = y - 1; by < y + h; by += step) { bulbAt(x - 5, by); bulbAt(x + w + 2, by); }
+
+  /* the screen */
+  pxc(X, x, y, w, h, BOARD);
+  /* a faint scan of pixel rows, so it reads as a screen */
+  for (var sy = y; sy < y + h; sy += 3) pxc(X, x, sy, w, 1, 'rgba(255,255,255,0.016)');
+
+  if (flash) {
+    X.globalAlpha = flash.a;
+    pxc(X, x, y, w, h, flash.col);
+    X.globalAlpha = 1;
+  }
+}
+
+/* a panel inside the board */
+function panel(x, y, w, h, fill, edge) {
+  pxc(X, x, y, w, h, fill);
+  if (edge) {
+    pxc(X, x, y, w, 1, edge);
+    pxc(X, x, y + h - 1, w, 1, edge);
+    pxc(X, x, y, 1, h, edge);
+    pxc(X, x + w - 1, y, 1, h, edge);
+  }
+}
+
+/* ---------------- confetti, for a run worth celebrating ---------------- */
+var bits = [];
+function burst(n, cx, cy, cols) {
+  for (var i = 0; i < n; i++) {
+    var a = Math.random() * Math.PI * 2, sp = 20 + Math.random() * 90;
+    bits.push({
+      x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30,
+      t: 0, life: 0.8 + Math.random() * 0.9,
+      col: cols[(Math.random() * cols.length) | 0],
+    });
+  }
+  if (bits.length > 260) bits.splice(0, bits.length - 260);
+}
+function stepBits(dt) {
+  for (var i = bits.length - 1; i >= 0; i--) {
+    var b = bits[i];
+    b.t += dt;
+    if (b.t > b.life) { bits.splice(i, 1); continue; }
+    b.x += b.vx * dt; b.y += b.vy * dt; b.vy += 220 * dt; b.vx *= 0.99;
+  }
+}
+function drawBits() {
+  for (var i = 0; i < bits.length; i++) {
+    var b = bits[i];
+    X.globalAlpha = Math.max(0, 1 - b.t / b.life);
+    pxc(X, Math.round(b.x), Math.round(b.y), 2, 2, b.col);
+  }
+  X.globalAlpha = 1;
+}
+
+/* ---------------- the whole backdrop ---------------- */
+/* The footer carries live text, so it is a dark bar rather than turf.
+   The first pass put the hint line straight onto the grass, where grey
+   on green and green on green were both unreadable. */
+var FOOT_Y = H - 22;
+
+function drawStadium(st) {
+  pxc(X, 0, 0, W, H, '#070c16');
+  drawCrowd(0, 32, 4242, st.roar || 0);
+  drawLights();
+  drawTurf(BOARD_Y + BOARD_H + 6, FOOT_Y - (BOARD_Y + BOARD_H + 6));
+  pxc(X, 0, FOOT_Y, W, H - FOOT_Y, 'rgba(5,9,16,0.92)');
+  pxc(X, 0, FOOT_Y, W, 1, AMBER);
+}
+/* ============================================================
+   FOURTH AND LONG — rules
+   Three modes over one bank of 500 questions. The questions are
+   used exactly as supplied; the only thing this file does to them
+   is choose an order and shuffle which slot the right answer sits
+   in, so nobody learns that it is usually B.
+   ============================================================ */
+
+var GAME = 'nfl-trivia';
+
+var MODE_LIST = ['sudden', 'drill', 'ten'];
+var MODES = {
+  sudden: {
+    name: 'SUDDEN DEATH',
+    line1: 'ONE WRONG ANSWER AND THE RUN IS OVER.',
+    line2: 'HOW FAR CAN YOU GET?',
+  },
+  drill: {
+    name: 'TWO MINUTE DRILL',
+    line1: 'TWO MINUTES ON THE CLOCK. RIGHT ADDS',
+    line2: 'THREE SECONDS, WRONG COSTS FIVE.',
+  },
+  ten: {
+    name: 'QUICK TEN',
+    line1: 'TEN QUESTIONS, NO PENALTY FOR A MISS.',
+    line2: 'ONE SCORE OUT OF TEN.',
+  },
+};
+
+var DRILL_SECONDS = 120;
+var TEN_COUNT = 10;
+var REVEAL_HOLD = 0.45;        /* you cannot skip past the answer instantly */
+
+/* ---------------- shuffling ----------------
+   Fisher-Yates driven by splitmix32, so a run is reproducible from
+   its seed and the order is genuinely flat. */
+function shuffled(n, seed) {
+  var a = [];
+  for (var i = 0; i < n; i++) a.push(i);
+  for (var k = n - 1; k > 0; k--) {
+    var j = Math.floor(mix32(seed + k * 2654435761) * (k + 1));
+    var t = a[k]; a[k] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* ---------------- state ---------------- */
+var G = null;
+var view = 'menu';
+var menu = { sel: 0 };
+
+var BEST = {
+  sudden: { streak: 0, score: 0 },
+  drill: { correct: 0, score: 0 },
+  ten: { correct: 0, score: 0, plays: 0 },
+};
+
+function startMode(id) {
+  var seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
+  G = {
+    mode: id,
+    seed: seed,
+    order: shuffled(BANK.length, seed),
+    cursor: 0,
+    asked: 0,
+    correct: 0,
+    streak: 0,
+    bestStreak: 0,
+    score: 0,
+    clock: id === 'drill' ? DRILL_SECONDS : 0,
+    phase: 'ask',
+    q: null,
+    picked: -1,
+    revealT: 0,
+    flash: null,
+    roar: 0,
+    shake: 0,
+    notice: null,
+    noticeT: 0,
+    newBest: false,
+    lastGain: 0,
+  };
+  view = 'play';
+  nextQuestion(G);
+  return G;
+}
+
+/* Pull the next question and shuffle its four options. The bank's own
+   answer spread is close to even already, but shuffling removes any
+   chance of a positional tell and costs nothing. */
+function nextQuestion(G) {
+  /* Five hundred questions is more than anyone will see in a run, but a
+     long Two Minute Drill streak could in principle reach the end. Reshuffle
+     and start again rather than repeating in the same order. */
+  if (G.cursor >= G.order.length) {
+    G.order = shuffled(BANK.length, (G.seed + G.asked * 2654435761) >>> 0);
+    G.cursor = 0;
+  }
+  var row = BANK[G.order[G.cursor]];
+  G.cursor++;
+
+  var n = row[1].length;
+  var slots = [];
+  for (var i = 0; i < n; i++) slots.push(i);
+  for (var k = n - 1; k > 0; k--) {
+    var j = Math.floor(mix32(G.seed + G.asked * 7919 + k * 104729) * (k + 1));
+    var t = slots[k]; slots[k] = slots[j]; slots[j] = t;
+  }
+  var opts = [], answer = 0;
+  for (var s = 0; s < n; s++) {
+    opts.push(row[1][slots[s]]);
+    if (slots[s] === row[2]) answer = s;
+  }
+
+  G.q = { text: row[0], opts: opts, answer: answer };
+  G.phase = 'ask';
+  G.picked = -1;
+  G.revealT = 0;
+  G.lastGain = 0;
+  return G.q;
+}
+
+/* points: a flat hundred, plus a streak bonus that is worth chasing
+   without letting an early run decide the whole board */
+function pointsFor(streak) {
+  return 100 + Math.min(300, Math.max(0, streak - 1) * 25);
+}
+
+function answerWith(G, i) {
+  if (!G || G.phase !== 'ask' || !G.q) return null;
+  if (i < 0 || i >= G.q.opts.length) return null;
+
+  G.picked = i;
+  G.phase = 'reveal';
+  G.revealT = 0;
+  G.asked++;
+
+  var right = i === G.q.answer;
+  if (right) {
+    G.correct++;
+    G.streak++;
+    if (G.streak > G.bestStreak) G.bestStreak = G.streak;
+    G.lastGain = pointsFor(G.streak);
+    G.score += G.lastGain;
+    G.flash = { col: '#2f7d45', a: 0.42 };
+    G.roar = 0.5;
+    if (G.mode === 'drill') G.clock = Math.min(DRILL_SECONDS, G.clock + 3);
+    if (G.streak > 0 && G.streak % 5 === 0) {
+      G.notice = G.streak + ' IN A ROW';
+      G.noticeT = 0;
+    }
+  } else {
+    G.streak = 0;
+    G.lastGain = 0;
+    G.flash = { col: '#7d2f2f', a: 0.42 };
+    G.shake = 0.32;
+    if (G.mode === 'drill') G.clock = Math.max(0, G.clock - 5);
+  }
+  return right;
+}
+
+/* has the run finished? */
+function runOver(G) {
+  if (!G) return false;
+  if (G.mode === 'sudden') return G.phase === 'reveal' && G.picked >= 0 && G.picked !== G.q.answer;
+  if (G.mode === 'ten') return G.asked >= TEN_COUNT;
+  if (G.mode === 'drill') return G.clock <= 0;
+  return false;
+}
+
+/* move on from a revealed answer */
+function advance(G) {
+  if (!G || G.phase !== 'reveal' || G.revealT < REVEAL_HOLD) return false;
+  if (runOver(G)) { endRun(); return true; }
+  nextQuestion(G);
+  return false;
+}
+
+function endRun() {
+  view = 'over';
+  G.newBest = false;
+  var b = BEST[G.mode];
+  if (G.mode === 'sudden') {
+    if (G.correct > b.streak) { b.streak = G.correct; G.newBest = true; }
+    if (G.score > b.score) { b.score = G.score; G.newBest = true; }
+  } else if (G.mode === 'drill') {
+    if (G.correct > b.correct) { b.correct = G.correct; G.newBest = true; }
+    if (G.score > b.score) { b.score = G.score; G.newBest = true; }
+  } else {
+    b.plays = (b.plays || 0) + 1;
+    if (G.correct > b.correct) { b.correct = G.correct; G.newBest = true; }
+    if (G.score > b.score) { b.score = G.score; G.newBest = true; }
+  }
+  if (G.newBest) burst(90, W / 2, 120, ['#ffbe2e', '#4ade6a', '#e9f0f7', '#8fa3c4']);
+  saveBest();
+}
+
+/* ---------------- the frame ---------------- */
+function update(dt) {
+  if (!G || view !== 'play') return;
+
+  if (G.flash) {
+    G.flash.a -= dt * 1.1;
+    if (G.flash.a <= 0) G.flash = null;
+  }
+  if (G.roar > 0) G.roar = Math.max(0, G.roar - dt * 0.9);
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 1.4);
+  if (G.notice) {
+    G.noticeT += dt;
+    if (G.noticeT > 1.8) G.notice = null;
+  }
+  if (G.phase === 'reveal') G.revealT += dt;
+
+  if (G.mode === 'drill') {
+    G.clock = Math.max(0, G.clock - dt);
+    /* the clock only stops once the answer on screen has been read */
+    if (G.clock <= 0 && (G.phase === 'ask' || G.revealT >= REVEAL_HOLD)) endRun();
+  }
+}
+
+/* ---------------- saving ----------------
+   The site route takes a game, a key and a string. Signed out it
+   answers 401, which is not an error here: the score still lives in
+   this browser, it just does not follow you to another one. */
+var LOCAL_KEY = 'fal:local:best';
+
+function saveBest() {
+  try { window.localStorage.setItem(LOCAL_KEY, JSON.stringify(BEST)); } catch (e) { /* private mode */ }
+  if (typeof window.fetch !== 'function') return;
+  try {
+    window.fetch('/api/games/saves', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ game: GAME, key: 'best', value: JSON.stringify(BEST) }),
+    }).catch(function () { });
+  } catch (e) { /* offline */ }
+}
+
+function mergeBest(obj) {
+  if (!obj || typeof obj !== 'object') return;
+  for (var k in BEST) {
+    if (!obj[k]) continue;
+    for (var f in BEST[k]) {
+      if (typeof obj[k][f] === 'number' && obj[k][f] > BEST[k][f]) BEST[k][f] = obj[k][f];
+    }
+  }
+}
+
+function loadBest() {
+  try {
+    var raw = window.localStorage.getItem(LOCAL_KEY);
+    if (raw) mergeBest(JSON.parse(raw));
+  } catch (e) { /* ignore */ }
+  /* No fetch at all is survivable: the score still lives in this browser.
+     Letting it throw here would take the whole boot sequence down with it
+     and leave a blank board, which is a far worse trade. */
+  if (typeof window.fetch !== 'function') return Promise.resolve();
+  return window.fetch('/api/games/saves?game=' + GAME + '&key=best')
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (d && d.value) mergeBest(JSON.parse(d.value));
+    })
+    .catch(function () { });
+}
+/* ============================================================
+   FOURTH AND LONG — screens, input, loop
+   ============================================================ */
+
+var UIst = { t: 0 };
+var LETTER = ['A', 'B', 'C', 'D'];
+
+/* where the four answer rows live inside the board */
+var ROW_X = BOARD_X + 10, ROW_W = BOARD_W - 20;
+var ROW_H = 24, ROW_GAP = 4, ROW_TOP = BOARD_Y + 82;
+function rowRect(i) {
+  return { x: ROW_X, y: ROW_TOP + i * (ROW_H + ROW_GAP), w: ROW_W, h: ROW_H };
+}
+
+function clockText(s) {
+  var m = Math.floor(Math.max(0, s) / 60), r = Math.floor(Math.max(0, s) % 60);
+  return m + ':' + (r < 10 ? '0' : '') + r;
+}
+
+/* ---------------- the strip across the top ---------------- */
+function drawHud() {
+  pxc(X, 0, 0, W, 20, 'rgba(5,9,16,0.88)');
+  pxc(X, 0, 20, W, 1, AMBER);
+
+  var m = MODES[G.mode];
+  textAt(m.name, 8, 7, AMBER, 1);
+
+  if (G.mode === 'drill') {
+    var low = G.clock <= 15;
+    var t = clockText(G.clock);
+    var blink = low && Math.floor(UIst.t * 4) % 2 === 0;
+    textCenter(t, W / 2, 5, blink ? '#ffffff' : (low ? RED : '#ffffff'), 2);
+    /* the clock as a bar, because a number alone does not feel like time */
+    var frac = Math.max(0, Math.min(1, G.clock / DRILL_SECONDS));
+    pxc(X, W / 2 - 60, 17, 120, 2, '#2b3650');
+    pxc(X, W / 2 - 60, 17, Math.round(120 * frac), 2, low ? RED : GREEN);
+  } else if (G.mode === 'ten') {
+    textCenter('QUESTION ' + Math.min(TEN_COUNT, G.asked + (G.phase === 'reveal' ? 0 : 1)) +
+      ' OF ' + TEN_COUNT, W / 2, 7, '#ffffff', 1);
+  } else {
+    textCenter('STREAK ' + G.streak, W / 2, 7, G.streak >= 5 ? AMBER : '#ffffff', 1);
+  }
+
+  var sc = String(G.score);
+  textAt(sc, W - 8 - textWidth(sc, 1), 7, '#ffffff', 1);
+  var lbl = 'SCORE';
+  textAt(lbl, W - 8 - textWidth(sc, 1) - 6 - textWidth(lbl, 1), 7, STEEL, 1);
+}
+
+/* ---------------- the question ---------------- */
+function drawQuestion() {
+  var box = { x: BOARD_X + 10, y: BOARD_Y + 8, w: BOARD_W - 20, h: 64 };
+  panel(box.x, box.y, box.w, box.h, '#111b2d', '#263a52');
+
+  /* a marker bar down the left of the question, like a broadcast lower third */
+  pxc(X, box.x, box.y, 3, box.h, AMBER);
+
+  /* Long questions step down a size rather than spilling off the board. */
+  var fit = fitLines(G.q.text, box.w - 18, 4, [2, 1]);
+  var lineH = fit.sc === 2 ? 17 : 10;
+  var totalH = fit.lines.length * lineH;
+  var y = Math.round(box.y + (box.h - totalH) / 2) + 1;
+  for (var i = 0; i < fit.lines.length; i++) {
+    textCenter(fit.lines[i], box.x + box.w / 2 + 1, y + i * lineH, '#ffffff', fit.sc);
+  }
+}
+
+/* ---------------- the four answers ---------------- */
+function drawAnswers() {
+  for (var i = 0; i < G.q.opts.length; i++) {
+    var r = rowRect(i);
+    var isAnswer = i === G.q.answer;
+    var isPick = i === G.picked;
+    var revealed = G.phase === 'reveal';
+
+    var fill = '#16213a', edge = '#2c3a57', ink = '#dde6f5', badge = '#2c3a57', badgeInk = '#9fb0cc';
+
+    if (revealed) {
+      if (isAnswer) {
+        fill = '#1d5c33'; edge = GREEN; ink = '#eafff0'; badge = GREEN; badgeInk = '#06240f';
+      } else if (isPick) {
+        fill = '#5c1d1d'; edge = RED; ink = '#ffeaea'; badge = RED; badgeInk = '#2a0606';
+      } else {
+        fill = '#101828'; edge = '#1e2a40'; ink = '#56657f'; badge = '#1e2a40'; badgeInk = '#56657f';
+      }
+    } else if (hover === i) {
+      fill = '#20304f'; edge = AMBER; ink = '#ffffff'; badge = AMBER; badgeInk = '#1a1403';
+    }
+
+    panel(r.x, r.y, r.w, r.h, fill, edge);
+    /* the letter badge */
+    pxc(X, r.x + 1, r.y + 1, 22, r.h - 2, badge);
+    textCenter(LETTER[i], r.x + 12, r.y + (r.h - 7) / 2, badgeInk, 1);
+
+    /* the option text, shrunk only if it has to be */
+    var maxW = r.w - 34;
+    var sc = textWidth(G.q.opts[i], 2) <= maxW ? 2 : 1;
+    var lines = sc === 2 ? [normalize(G.q.opts[i])] : wrapText(G.q.opts[i], maxW, 1);
+    if (lines.length > 2) lines = lines.slice(0, 2);
+    var lh = sc === 2 ? 0 : 9;
+    var top = Math.round(r.y + (r.h - (lines.length === 1 ? 7 * sc : lines.length * lh)) / 2);
+    for (var k = 0; k < lines.length; k++) textAt(lines[k], r.x + 29, top + k * lh, ink, sc);
+
+    /* a tick or a cross once it is settled */
+    if (revealed && (isAnswer || isPick)) {
+      var mx = r.x + r.w - 16, my = r.y + (r.h - 9) / 2;
+      if (isAnswer) {
+        pxc(X, mx + 1, my + 5, 2, 2, GREEN); pxc(X, mx + 3, my + 7, 2, 2, GREEN);
+        pxc(X, mx + 5, my + 5, 2, 2, GREEN); pxc(X, mx + 7, my + 2, 2, 2, GREEN);
+        pxc(X, mx + 9, my, 2, 2, GREEN);
+      } else {
+        for (var d = 0; d < 5; d++) {
+          pxc(X, mx + 1 + d * 2, my + d * 2, 2, 2, RED);
+          pxc(X, mx + 9 - d * 2, my + d * 2, 2, 2, RED);
+        }
+      }
+    }
+  }
+}
+
+/* ---------------- the line under the answers ---------------- */
+function drawFoot() {
+  var y = FOOT_Y + 8;
+  if (G.phase === 'ask') {
+    textCenter('PRESS A B C D, 1 2 3 4, OR CLICK AN ANSWER', W / 2, y, '#9fb0cc', 1);
+    return;
+  }
+  var right = G.picked === G.q.answer;
+  if (right) {
+    var gain = '+' + G.lastGain;
+    var tail = G.streak > 1 ? '   STREAK ' + G.streak : '';
+    textCenter(gain + tail + '   PRESS TO CONTINUE', W / 2, y, GREEN, 1);
+  } else if (G.mode === 'sudden') {
+    textCenter('THAT IS THE RUN   PRESS TO SEE THE DAMAGE', W / 2, y, RED, 1);
+  } else {
+    textCenter('THE ANSWER WAS ' + LETTER[G.q.answer] + '   PRESS TO CONTINUE', W / 2, y, RED, 1);
+  }
+}
+
+/* ---------------- a streak shout ---------------- */
+function drawNotice() {
+  if (!G.notice) return;
+  var a = G.noticeT < 1.2 ? 1 : Math.max(0, 1 - (G.noticeT - 1.2) * 1.6);
+  X.globalAlpha = a;
+  var w = textWidth(G.notice, 2) + 24;
+  pxc(X, W / 2 - w / 2, 26, w, 18, 'rgba(5,9,16,0.9)');
+  pxc(X, W / 2 - w / 2, 26, w, 1, AMBER);
+  pxc(X, W / 2 - w / 2, 43, w, 1, AMBER);
+  textCenter(G.notice, W / 2, 31, AMBER, 2);
+  X.globalAlpha = 1;
+}
+
+/* ---------------- menu ---------------- */
+function bestLine(id) {
+  var b = BEST[id];
+  if (id === 'sudden') return b.streak ? 'BEST RUN ' + b.streak : '';
+  if (id === 'drill') return b.correct ? 'BEST ' + b.correct + ' RIGHT' : '';
+  return b.correct ? 'BEST ' + b.correct + '/10' : '';
+}
+
+function drawMenu() {
+  drawStadium({ roar: 0 });
+  drawBoard(UIst.t, null, Math.floor(UIst.t * 6));
+
+  textCenterShadow('FOURTH AND LONG', W / 2, BOARD_Y + 14, AMBER, '#5a3f00', 3);
+  textCenter('FIVE HUNDRED QUESTIONS OF PRO FOOTBALL', W / 2, BOARD_Y + 40, '#9fb0cc', 1);
+  pxc(X, BOARD_X + 60, BOARD_Y + 52, BOARD_W - 120, 1, '#2c3a57');
+
+  for (var i = 0; i < MODE_LIST.length; i++) {
+    var id = MODE_LIST[i], m = MODES[id], on = menu.sel === i;
+    var y = BOARD_Y + 62 + i * 22;
+    panel(BOARD_X + 24, y, BOARD_W - 48, 19, on ? '#20304f' : '#131d31', on ? AMBER : '#263a52');
+    textAt(on ? '>' : ' ', BOARD_X + 32, y + 6, AMBER, 1);
+    textAt(m.name, BOARD_X + 44, y + 6, on ? '#ffffff' : '#9fb0cc', 1);
+    var bt = bestLine(id);
+    if (bt) textAt(bt, BOARD_X + BOARD_W - 32 - textWidth(bt, 1), y + 6, on ? GREEN : '#4d6a58', 1);
+  }
+
+  var sel = MODES[MODE_LIST[menu.sel]];
+  var py = BOARD_Y + 134;
+  panel(BOARD_X + 24, py, BOARD_W - 48, 30, 'rgba(5,9,16,0.75)', '#263a52');
+  pxc(X, BOARD_X + 24, py, 3, 30, AMBER);
+  textAt(sel.line1, BOARD_X + 34, py + 7, '#dde6f5', 1);
+  textAt(sel.line2, BOARD_X + 34, py + 18, '#dde6f5', 1);
+
+  if (Math.floor(UIst.t * 2) % 2 === 0) {
+    textCenter('UP DOWN TO CHOOSE     PRESS TO PLAY', W / 2, FOOT_Y + 8, '#ffffff', 1);
+  }
+}
+
+/* ---------------- the end of a run ---------------- */
+function drawOver() {
+  drawStadium({ roar: G.newBest ? 0.35 : 0 });
+  drawBoard(UIst.t, null, Math.floor(UIst.t * 6));
+
+  var pct = G.asked ? Math.round((G.correct / G.asked) * 100) : 0;
+  var head = G.mode === 'sudden' ? 'RUN OVER' : G.mode === 'drill' ? 'TIME' : 'THAT IS TEN';
+  textCenterShadow(head, W / 2, BOARD_Y + 12, G.newBest ? GREEN : AMBER, '#3a2a00', 3);
+
+  if (G.newBest) textCenter('A NEW BEST', W / 2, BOARD_Y + 38, GREEN, 1);
+  else textCenter(MODES[G.mode].name, W / 2, BOARD_Y + 38, '#9fb0cc', 1);
+
+  var stats = [
+    ['CORRECT', G.correct + ' OF ' + G.asked],
+    ['ACCURACY', pct + '%'],
+    ['BEST STREAK', String(G.bestStreak)],
+    ['SCORE', String(G.score)],
+  ];
+  for (var i = 0; i < stats.length; i++) {
+    var y = BOARD_Y + 56 + i * 20;
+    panel(BOARD_X + 40, y, BOARD_W - 80, 17, i === 3 ? '#1b2c22' : '#131d31',
+      i === 3 ? '#2f6b45' : '#263a52');
+    textAt(stats[i][0], BOARD_X + 50, y + 5, STEEL, 1);
+    var v = stats[i][1];
+    textAt(v, BOARD_X + BOARD_W - 50 - textWidth(v, i === 3 ? 2 : 1), y + (i === 3 ? 2 : 5),
+      i === 3 ? AMBER : '#ffffff', i === 3 ? 2 : 1);
+  }
+
+  drawBits();
+  if (Math.floor(UIst.t * 2) % 2 === 0) {
+    textCenter('PRESS TO PLAY AGAIN     ESC FOR THE MENU', W / 2, FOOT_Y + 8, '#ffffff', 1);
+  }
+}
+
+/* ---------------- play ---------------- */
+function drawPlay() {
+  var sx = 0, sy = 0;
+  if (G.shake > 0) {
+    sx = Math.round((Math.random() - 0.5) * G.shake * 14);
+    sy = Math.round((Math.random() - 0.5) * G.shake * 8);
+  }
+  X.save();
+  X.translate(sx, sy);
+  drawStadium(G);
+  drawBoard(UIst.t, G.flash, Math.floor(UIst.t * 6));
+  drawQuestion();
+  drawAnswers();
+  X.restore();
+  drawHud();
+  drawFoot();
+  drawNotice();
+  drawBits();
+}
+
+function draw() {
+  X.clearRect(0, 0, W, H);
+  if (view === 'menu') { drawMenu(); return; }
+  if (view === 'over') { drawOver(); return; }
+  if (!G) { drawMenu(); return; }
+  drawPlay();
+}
+
+/* ---------------- input ---------------- */
+var hover = -1;
+
+function press() {
+  if (view === 'menu') { startMode(MODE_LIST[menu.sel]); return; }
+  if (view === 'over') { startMode(G.mode); return; }
+  if (!G) return;
+  if (G.phase === 'reveal') advance(G);
+}
+
+function choose(i) {
+  if (view !== 'play' || !G || G.phase !== 'ask') return;
+  answerWith(G, i);
+}
+
+function moveMenu(d) {
+  if (view !== 'menu') return;
+  menu.sel = (menu.sel + d + MODE_LIST.length) % MODE_LIST.length;
+}
+
+function toMenu() {
+  view = 'menu';
+  G = null;
+  bits.length = 0;
+}
+
+/* which answer row is under a point, in board pixels */
+function rowAt(px, py) {
+  for (var i = 0; i < 4; i++) {
+    var r = rowRect(i);
+    if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i;
+  }
+  return -1;
+}
+
+function wire() {
+  CV = document.getElementById('c');
+  X = CV.getContext('2d');
+  X.imageSmoothingEnabled = false;
+
+  function toBoard(e) {
+    var rect = CV.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (W / rect.width),
+      y: (e.clientY - rect.top) * (H / rect.height),
+    };
+  }
+
+  CV.addEventListener('mousemove', function (e) {
+    if (view !== 'play' || !G || G.phase !== 'ask') { hover = -1; return; }
+    var p = toBoard(e);
+    hover = rowAt(p.x, p.y);
+    CV.style.cursor = hover >= 0 ? 'pointer' : 'default';
+  });
+  CV.addEventListener('mouseleave', function () { hover = -1; });
+
+  CV.addEventListener('click', function (e) {
+    var p = toBoard(e);
+    if (view === 'play' && G && G.phase === 'ask') {
+      var i = rowAt(p.x, p.y);
+      if (i >= 0) { choose(i); return; }
+      return;
+    }
+    press();
+  });
+
+  /* touch: the click handler covers taps, but the hover state has to be
+     cleared or a finger leaves a row lit after it has gone */
+  CV.addEventListener('touchend', function () { hover = -1; }, { passive: true });
+
+  window.addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (e.repeat) return;
+    if (k === 'Escape') { if (view !== 'menu') toMenu(); return; }
+    if (view === 'menu') {
+      if (k === 'ArrowUp' || k === 'w' || k === 'W') { moveMenu(-1); e.preventDefault(); return; }
+      if (k === 'ArrowDown' || k === 's' || k === 'S') { moveMenu(1); e.preventDefault(); return; }
+    }
+    var idx = 'abcd'.indexOf(String(k).toLowerCase());
+    if (idx < 0) idx = '1234'.indexOf(k);
+    if (idx >= 0 && view === 'play' && G && G.phase === 'ask') { choose(idx); e.preventDefault(); return; }
+    if (k === ' ' || k === 'Enter') { press(); e.preventDefault(); }
+  });
+
+  document.getElementById('kA').addEventListener('click', function () { choose(0); });
+  document.getElementById('kB').addEventListener('click', function () { choose(1); });
+  document.getElementById('kC').addEventListener('click', function () { choose(2); });
+  document.getElementById('kD').addEventListener('click', function () { choose(3); });
+  document.getElementById('kGo').addEventListener('click', function () { press(); });
+  document.getElementById('kM').addEventListener('click', function () {
+    document.body.classList.toggle('flat');
+  });
+}
+
+/* ---------------- loop ---------------- */
+var last = 0;
+function frame(ts) {
+  var dt = last ? Math.min(0.05, (ts - last) / 1000) : 0.016;
+  last = ts;
+  UIst.t += dt;
+  update(dt);
+  stepBits(dt);
+  draw();
+  window.requestAnimationFrame(frame);
+}
+
+wire();
+Promise.resolve(loadBest()).catch(function () { }).then(function () {
+  window.requestAnimationFrame(frame);
+});
+</script>
+</body></html>

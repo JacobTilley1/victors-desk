@@ -12,6 +12,7 @@ import EmptyState from '@/components/empty-state';
 import SubscribeForm from '@/components/subscribe-form';
 import ArchiveRail from '@/components/archive-rail';
 import ArcadeStrip from '@/components/games/arcade-strip';
+import AdUnit from '@/components/ads/ad-unit';
 import { getPublishedPosts, getRecentThreads, getCommentCounts, getSiteStats, getMostRead } from '@/lib/queries';
 import { getProfile } from '@/lib/auth';
 import { TEAMS } from '@/lib/constants';
@@ -340,6 +341,10 @@ export default async function HomePage() {
             )}
 
             <SubscribeForm source="home" />
+
+            {/* Below the newsletter block, so the ask that is actually worth
+                something to the site comes first. */}
+            <AdUnit slot="sidebar" minHeight={600} format="vertical" className="my-0" />
 
             <div className="card p-5">
               <h3 className="font-display text-[15px] font-bold text-navy">Browse by sport</h3>

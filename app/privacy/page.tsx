@@ -129,15 +129,72 @@ export default function PrivacyPage() {
           items={[
             <><strong>Supabase</strong> — database, sign-in, and image storage.</>,
             <><strong>Vercel</strong> — hosting and privacy-preserving traffic analytics, which do not use cookies.</>,
-            <><strong>Google</strong> — sign-in and Google Analytics 4.</>,
+            <><strong>Google</strong> — sign-in, Google Analytics 4, and AdSense advertising.</>,
           ]}
         />
 
         <H>Advertising</H>
         <P>
-          The Site does not currently show advertising. If that changes, this policy will be
-          updated before any ads appear, and it will name the advertising partners and describe
-          the cookies they use to personalise and measure ads.
+          The Site carries advertising, which is how it stays free to read. Ads are not shown on
+          this page, on the other legal pages, or on account and admin screens.
+        </P>
+        <Bullets
+          items={[
+            <>
+              <strong>Google AdSense</strong> serves the ads. Google and its partners use cookies
+              to show ads based on your previous visits to this and other sites, and to measure
+              whether an ad worked. You can turn personalised advertising off at{' '}
+              <a
+                href="https://myadcenter.google.com/"
+                className="font-medium text-navy-500 underline decoration-maize decoration-2 underline-offset-2"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                My Ad Center
+              </a>
+              , and you will still see ads &mdash; they will just be less relevant to you.
+            </>,
+            <>
+              <strong>Third-party vendors</strong> that Google works with may also set cookies on
+              this site. You can opt out of personalised advertising across participating vendors
+              at{' '}
+              <a
+                href="https://optout.aboutads.info/"
+                className="font-medium text-navy-500 underline decoration-maize decoration-2 underline-offset-2"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                aboutads.info
+              </a>
+              {' '}or{' '}
+              <a
+                href="https://www.youronlinechoices.eu/"
+                className="font-medium text-navy-500 underline decoration-maize decoration-2 underline-offset-2"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Your Online Choices
+              </a>
+              .
+            </>,
+            <>
+              <strong>If you are in the EEA, the UK or Switzerland</strong>, you will be asked
+              before any advertising cookie is set, and you can change that answer at any time
+              from the consent link the prompt leaves behind.
+            </>,
+          ]}
+        />
+        <P>
+          Google&rsquo;s own account of what it collects when it serves an ad is in its{' '}
+          <a
+            href="https://policies.google.com/technologies/partner-sites"
+            className="font-medium text-navy-500 underline decoration-maize decoration-2 underline-offset-2"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            partner-sites policy
+          </a>
+          . We never pass Google your name, email address, or anything else from your account.
         </P>
 
         <H>How long we keep it</H>

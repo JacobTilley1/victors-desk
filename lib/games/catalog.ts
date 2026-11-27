@@ -43,6 +43,17 @@ export const KIND_LABEL: Record<GameKind, string> = {
 
 export const GAMES: Game[] = [
   {
+    slug: 'fourth-and-long',
+    name: 'Fourth and Long',
+    kicker: 'Pro football trivia',
+    tagline: 'Five hundred questions.',
+    blurb:
+      'Five hundred questions on the NFL, from the rule book to the record book. Survive on one life, beat a two-minute clock, or take a quick ten. Four answers, no hints.',
+    kind: 'arcade',
+    labels: ['Trivia', 'NFL'],
+    added: '2026-11-27',
+  },
+  {
     slug: 'top-shelf',
     name: 'Top Shelf',
     kicker: 'Retro breakaway shootout',
